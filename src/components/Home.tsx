@@ -76,9 +76,15 @@ const Home: React.FC = () => {
         </div>
       )}
       
-      <Link to="/ar" className="ar-button">
-        Iniciar Experiencia AR
-      </Link>
+      <div className="buttons-container">
+        <Link to="/ar" className="ar-button">
+          Iniciar Experiencia AR
+        </Link>
+        
+        <Link to="/ar-test" className="ar-button test-button">
+          Iniciar Experiencia AR (Ubicación de prueba)
+        </Link>
+      </div>
     </div>
   );
 };

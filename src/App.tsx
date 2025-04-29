@@ -4,6 +4,7 @@ import './App.css';
 
 import Home from './components/Home';
 import ARView from './components/ARView';
+import ARViewTest from './components/ARViewTest';
 
 const App: React.FC = () => {
   return (
@@ -12,6 +13,7 @@ const App: React.FC = () => {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/ar" element={<ARView />} />
+          <Route path="/ar-test" element={<ARViewTest />} />
         </Routes>
       </div>
     </Router>

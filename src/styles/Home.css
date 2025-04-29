@@ -51,6 +51,15 @@ p {
   font-weight: bold;
 }
 
+.buttons-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  align-items: center;
+  width: 100%;
+  max-width: 500px;
+}
+
 .ar-button {
   display: inline-block;
   background-color: #007bff;
@@ -63,9 +72,20 @@ p {
   letter-spacing: 1px;
   box-shadow: 0 4px 6px rgba(0, 123, 255, 0.2);
   transition: transform 0.2s, box-shadow 0.2s;
+  width: 100%;
+  text-align: center;
 }
 
 .ar-button:hover, .ar-button:focus {
   transform: translateY(-3px);
   box-shadow: 0 6px 8px rgba(0, 123, 255, 0.3);
+}
+
+.test-button {
+  background-color: #28a745;
+  box-shadow: 0 4px 6px rgba(40, 167, 69, 0.2);
+}
+
+.test-button:hover, .test-button:focus {
+  box-shadow: 0 6px 8px rgba(40, 167, 69, 0.3);
 } 

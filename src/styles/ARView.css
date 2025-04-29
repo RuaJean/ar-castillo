@@ -63,4 +63,19 @@ a-scene {
   text-decoration: none;
   z-index: 100;
   font-weight: bold;
+}
+
+.ar-info-overlay {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.6);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  text-align: center;
+  z-index: 100;
+  font-weight: bold;
+  max-width: 90%;
 } 
