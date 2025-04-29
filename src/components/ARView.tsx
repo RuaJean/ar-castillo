@@ -81,7 +81,7 @@ const ARView: React.FC = () => {
         position="0 0 -5"
         scale="1 1 1"
         rotation="0 0 0"
-        gltf-model="https://jeanrua.com/models/SantaMaria_futuro.glb">
+        gltf-model="https://cors-anywhere.herokuapp.com/https://jeanrua.com/models/SantaMaria_futuro.glb">
       </a-entity>
       
       <!-- Entidad para mostrar la posición del usuario -->
