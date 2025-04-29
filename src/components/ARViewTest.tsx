@@ -29,20 +29,19 @@ const enableAFrameDebug = () => {
   (window as any).AFRAME.DEBUG = true;
 };
 
-// URLs del modelo para distintos escenarios - actualizar para evitar problemas CORS
+// URLs del modelo para distintos escenarios - reducir resolución para modelos grandes
 const MODEL_URLS = {
-  remote: 'https://jeanrua.com/models/SantaMaria_futuro.glb', // URL remota principal
+  remote: 'https://jeanrua.com/models/SantaMaria_futuro_optimized.glb', // Versión optimizada
   local: './models/SantaMaria_futuro.glb',     // URL local (para desarrollo)
-  backup: 'https://assets.codepen.io/1681167/SantaMaria_futuro.glb', // URL alternativa sin problemas CORS
-  fallback: './models/SantaMaria_simple.glb',  // Modelo simplificado como último recurso
   simplified: 'https://jeanrua.com/models/SantaMaria_low.glb', // Versión ligera para móviles
-  minimal: 'https://models.babylonjs.com/CornellBox/cornellBox.glb' // Último recurso universal
+  fallback: './models/castle.glb',  // Modelo simple local como respaldo
+  placeholder: './models/placeholder.glb' // Modelo mínimo mientras carga
 };
 
 // Configuración del proceso de carga de modelos
 const MODEL_LOAD_CONFIG = {
-  maxAttempts: 4,
-  timeout: 3000000,
+  maxAttempts: 2,
+  timeout: 30000,
   minValidSize: 100 * 1024, // 100KB mínimo para considerar un modelo válido
   retryDelay: 2000,
   progressThrottle: 500 // ms entre actualizaciones de progreso
@@ -253,14 +252,14 @@ const ARViewTest = () => {
       }
     } else if (modelLoadAttempts === 1) {
       // Segundo intento: usar local si el primer intento fue remoto, o backup si ya intentamos local
-      const newUrl = currentModelUrl === MODEL_URLS.remote ? MODEL_URLS.local : MODEL_URLS.backup;
+      const newUrl = currentModelUrl === MODEL_URLS.remote ? MODEL_URLS.local : MODEL_URLS.fallback;
       logger.info(`Segundo intento: usando ${newUrl === MODEL_URLS.local ? 'URL local' : 'URL de backup GitHub'}`);
       return newUrl;
     } else if (modelLoadAttempts === 2) {
       // Tercer intento: usar GitHub si no se ha intentado aún
       if (!currentModelUrl.includes('github')) {
         logger.info('Tercer intento: usando URL de backup GitHub');
-        return MODEL_URLS.backup;
+        return MODEL_URLS.fallback;
       } else {
         // Si ya probamos GitHub, usar el modelo simplificado
         logger.info('Tercer intento: usando modelo simplificado');
@@ -375,7 +374,7 @@ const ARViewTest = () => {
     // Precargar modelos para evitar problemas CORS
     const preloadUrls = [
       MODEL_URLS.remote,
-      MODEL_URLS.backup,
+      MODEL_URLS.fallback,
       'https://assets.codepen.io/1681167/SantaMaria_futuro.glb',
       'https://models.babylonjs.com/CornellBox/cornellBox.glb'
     ];
@@ -565,104 +564,48 @@ const ARViewTest = () => {
     };
   }, [arReady, currentModelUrl, isMobileDevice]);
 
-  // Función mejorada de carga de modelo con manejo específico para iOS
+  // Función para cargar un modelo con manejo de progreso y recuperación
   const loadModel = async (url: string = MODEL_URLS.remote): Promise<void> => {
-    logger.info(`Iniciando carga de modelo. UA: ${navigator.userAgent}`);
+    logger.info(`Iniciando carga de modelo simplificada. URL: ${url}`);
     
-    if (!url) {
-      setError('URL del modelo no válida');
-      return;
-    }
-    
+    // Inicializar variables de estado
     setLoading(true);
     setModelLoading(true);
     setLoadingProgress(0);
     setCurrentStep('cargando modelo 3D');
+    setCurrentModelUrl(url);
     
-    // Definir URLs de modelos alternativos - más opciones para móviles
-    const modelUrls = {
-      primary: url,
-      local: MODEL_URLS.local,
-      simplified: MODEL_URLS.simplified,
-      backup: MODEL_URLS.backup,
-      minimal: MODEL_URLS.minimal
-    };
-    
-    // Configuración específica para iOS vs otros dispositivos
-    const config = {
-      maxAttempts: isMobileDevice ? 4 : 3, // Más intentos para móviles
-      timeout: deviceInfo.isIOS ? 2500000 : 4000000, // Más tiempo para carga completa
-      minValidSize: 1 * 1024, // Reducir a solo 1KB para pruebas iniciales
-      retryDelay: deviceInfo.isIOS ? 1000 : 2000,
-      progressThrottle: deviceInfo.isIOS ? 500 : 200
-    };
-    
-    // En iOS, iniciar un AudioContext para evitar bloqueos
-    if (deviceInfo.isIOS) {
+    try {
+      // Obtener contenedor del modelo
+      const modelEntity = document.getElementById('model-container');
+      if (!modelEntity) {
+        throw new Error('Contenedor de modelo no encontrado');
+      }
+      
+      // Mientras carga, mostrar un placeholder simple
       try {
-        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-        const audioContext = new AudioContext();
-        audioContext.resume().then(() => logger.info('AudioContext iniciado en iOS'));
+        modelEntity.setAttribute('gltf-model', '#placeholder-model');
       } catch (e) {
-        logger.warn('No se pudo iniciar AudioContext en iOS', e);
-      }
-    }
-    
-    let lastProgressUpdate = 0;
-    let currentAttempt = 0;
-    let lastUrl = '';
-    
-    // Función para determinar la próxima URL basada en el intento y el error
-    const getNextUrl = (attempt: number, error?: any): string => {
-      if (attempt === 1) return modelUrls.primary;
-      
-      // Si estamos en móvil, intentamos múltiples estrategias
-      if (isMobileDevice) {
-        if (attempt === 2) {
-          // En segundo intento, usar CDN público - sin problemas CORS
-          return 'https://assets.codepen.io/1681167/SantaMaria_futuro.glb';
-        } else if (attempt === 3) {
-          // En tercer intento, usar modelo público estándar
-          return 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF-Binary/Duck.glb';
-        } else {
-          // Último intento, usar modelo mínimo garantizado
-          return 'https://models.babylonjs.com/CornellBox/cornellBox.glb';
-        }
-      } else {
-        // Para desktop, alternar entre local y remoto
-        if (attempt === 2) {
-          return lastUrl === modelUrls.primary ? MODEL_URLS.local : MODEL_URLS.backup;
-        } else {
-          return MODEL_URLS.minimal;
-        }
-      }
-    };
-    
-    // Función mejorada para intentar usar un modelo precargado primero
-    const loadModelWithPreload = async (url: string): Promise<ArrayBuffer> => {
-      // Verificar si tenemos este modelo precargado
-      const preloadedData = getPreloadedModel(url);
-      if (preloadedData) {
-        logger.info(`Usando modelo precargado: ${url} (${preloadedData.byteLength} bytes)`);
-        return preloadedData;
+        logger.warn('No se pudo mostrar placeholder mientras carga');
       }
       
-      // Si no está precargado, cargar normalmente
-      if (isMobileDevice) {
-        // Usar XMLHttpRequest para móviles
-        return new Promise((resolve, reject) => {
+      // Para URLs remotas, intentar precargar con progreso
+      if (url.startsWith('http')) {
+        try {
+          logger.info(`Cargando modelo remoto con seguimiento de progreso: ${url}`);
+          
+          // Configurar request
           const xhr = new XMLHttpRequest();
           xhr.open('GET', url, true);
-          xhr.responseType = 'arraybuffer';
+          xhr.responseType = 'blob';
           
           // Manejar progreso
           xhr.onprogress = (event) => {
             if (event.lengthComputable) {
-              const now = Date.now();
-              if (now - lastProgressUpdate > config.progressThrottle) {
-                const progress = Math.min(99, Math.round((event.loaded / event.total) * 100));
-                setLoadingProgress(progress);
-                lastProgressUpdate = now;
+              const progress = Math.min(99, Math.round((event.loaded / event.total) * 100));
+              setLoadingProgress(progress);
+              if (progress % 10 === 0) {
+                logger.info(`Progreso de carga: ${progress}% (${formatBytes(event.loaded)} / ${formatBytes(event.total)})`);
               }
             }
           };
@@ -670,188 +613,159 @@ const ARViewTest = () => {
           // Manejar éxito
           xhr.onload = () => {
             if (xhr.status >= 200 && xhr.status < 300) {
-              if (xhr.response.byteLength < config.minValidSize) {
-                reject(new Error(`Modelo demasiado pequeño (${formatBytes(xhr.response.byteLength)}) - posible archivo corrupto`));
-                return;
+              const blob = xhr.response;
+              
+              // Verificar tamaño mínimo para evitar modelos corruptos
+              if (blob.size < 10 * 1024) { // Menos de 10KB
+                throw new Error(`Modelo demasiado pequeño (${formatBytes(blob.size)}) - posible archivo corrupto`);
               }
               
-              // Guardar en caché para futuros usos
-              preloadedModels[url] = xhr.response;
-              resolve(xhr.response);
+              const objectURL = URL.createObjectURL(blob);
+              logger.info(`Modelo descargado (${formatBytes(blob.size)}), aplicando a la escena`);
+              setLoadingProgress(100);
+              
+              // Aplicar modelo
+              modelEntity.removeAttribute('gltf-model'); // Quitar cualquier modelo previo
+              setTimeout(() => {
+                modelEntity.setAttribute('gltf-model', objectURL);
+                modelEntity.setAttribute('scale', isMobileDevice ? '0.5 0.5 0.5' : '1 1 1');
+                
+                // En iOS, forzar actualización para evitar problemas de renderizado
+                if (deviceInfo.isIOS) {
+                  setTimeout(() => {
+                    const scene = document.querySelector('a-scene');
+                    if (scene) {
+                      (scene as any).object3D?.updateMatrixWorld(true);
+                    }
+                  }, 500);
+                }
+              }, 100);
             } else {
-              reject(new Error(`Error HTTP: ${xhr.status}`));
+              throw new Error(`Error HTTP: ${xhr.status}`);
             }
           };
           
           // Manejar errores
           xhr.onerror = () => {
-            reject(new Error('Error de red al cargar el modelo'));
+            throw new Error('Error de red al cargar el modelo');
           };
           
           xhr.ontimeout = () => {
-            reject(new Error('Timeout al cargar el modelo'));
+            throw new Error('Timeout al cargar el modelo');
           };
           
           // Configurar timeout
-          xhr.timeout = config.timeout;
-          
-          // Agregar cabeceras para evitar problemas CORS
-          xhr.setRequestHeader('Accept', 'application/octet-stream');
-          if (url.includes('jeanrua.com')) {
-            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-          }
+          xhr.timeout = 60000; // 1 minuto máximo
           
           // Iniciar la carga
           xhr.send();
           xhrRef.current = xhr;
-        });
+        } catch (error) {
+          logger.warn(`Error en carga optimizada, intentando método directo: ${error}`);
+          modelEntity.setAttribute('gltf-model', url);
+        }
       } else {
-        // Usar fetch para desktop
-        const response = await fetch(url, {
-          headers: {
-            'Accept': 'application/octet-stream',
-            'X-Requested-With': 'XMLHttpRequest'
-          },
-          // Evitar caché en móviles
-          cache: 'no-store'
-        });
+        // Para URLs locales, cargar directamente
+        logger.info(`Cargando modelo local: ${url}`);
         
-        if (!response.ok) {
-          throw new Error(`Error de red: ${response.status} ${response.statusText}`);
-        }
-        
-        const contentLength = response.headers.get('content-length');
-        const totalSize = contentLength ? parseInt(contentLength, 10) : 0;
-        
-        if (totalSize && totalSize < config.minValidSize) {
-          throw new Error(`Modelo demasiado pequeño (${formatBytes(totalSize)}) - posible archivo corrupto`);
-        }
-        
-        // Configurar reader para manejar la carga con progreso
-        const reader = response.body?.getReader();
-        if (!reader) {
-          throw new Error('No se pudo obtener reader para la respuesta');
-        }
-        
-        // Leer los chunks y actualizar el progreso
-        let receivedLength = 0;
-        const chunks: Uint8Array[] = [];
-        
-        while (true) {
-          const { done, value } = await reader.read();
-          
-          if (done) {
-            break;
-          }
-          
-          chunks.push(value);
-          receivedLength += value.length;
-          
-          // Actualizar progreso con throttling para iOS
-          const now = Date.now();
-          if (now - lastProgressUpdate > config.progressThrottle) {
-            const progress = totalSize ? Math.min(99, Math.round((receivedLength / totalSize) * 100)) : 50;
-            setLoadingProgress(progress);
-            lastProgressUpdate = now;
-          }
-        }
-        
-        // Unir los chunks en un solo ArrayBuffer
-        const chunksAll = new Uint8Array(receivedLength);
-        let position = 0;
-        for (const chunk of chunks) {
-          chunksAll.set(chunk, position);
-          position += chunk.length;
-        }
-        
-        // Convertir Uint8Array a ArrayBuffer
-        return chunksAll.buffer;
-      }
-    };
-    
-    while (currentAttempt < config.maxAttempts) {
-      currentAttempt++;
-      setModelLoadAttempts(currentAttempt);
-      
-      // Seleccionar URL basada en el intento actual
-      const currentUrl = getNextUrl(currentAttempt);
-      
-      // Evitar intentar cargar la misma URL dos veces seguidas
-      if (currentUrl === lastUrl) {
-        logger.warn(`Saltando URL duplicada: ${currentUrl}`);
-        continue;
-      }
-      
-      lastUrl = currentUrl;
-      setCurrentModelUrl(currentUrl);
-      
-      try {
-        setCurrentStep(`cargando modelo (intento ${currentAttempt}/${config.maxAttempts})`);
-        
-        // Reemplazar la carga directa con la versión que usa precarga
-        const modelData = await loadModelWithPreload(currentUrl);
-        
-        // Aplicar este modelo a la escena
-        const modelEntity = document.getElementById('model-container');
-        if (!modelEntity) {
-          throw new Error('Contenedor de modelo no encontrado');
-        }
-        
-        // Crear blob y URL para el modelo
-        const blob = new Blob([modelData], { type: 'application/octet-stream' });
-        const modelObjectUrl = URL.createObjectURL(blob);
-        
-        logger.info(`Modelo descargado: ${formatBytes(modelData.byteLength)}, aplicando a la escena...`);
-        setLoadingProgress(100);
-        
-        // Aplicar modelo a A-Frame
-        modelEntity.setAttribute('gltf-model', modelObjectUrl);
-        modelEntity.setAttribute('scale', isMobileDevice ? '0.5 0.5 0.5' : '1 1 1');
-        
-        // Verificar carga en la escena
-        const checkInterval = setInterval(() => {
-          const model = (modelEntity as any).getObject3D && (modelEntity as any).getObject3D('mesh');
-          if (model) {
-            clearInterval(checkInterval);
-            logger.info('Modelo cargado exitosamente en la escena');
-            setLoading(false);
-            setModelLoading(false);
-            setCurrentStep('modelo cargado');
-          }
-        }, 500000);
-        
-        // Timeout para el verificador
+        // Pequeño retraso para permitir que la escena se inicialice
         setTimeout(() => {
-          clearInterval(checkInterval);
-          if (deviceInfo.isIOS) {
-            // En iOS, asumir que está bien incluso si no podemos verificar
-            logger.info('Asumiendo carga exitosa en iOS después de timeout');
-            setLoading(false);
-            setModelLoading(false);
-            setCurrentStep('modelo cargado (timeout)');
-          } else {
-            throw new Error('Timeout al verificar carga del modelo en la escena');
-          }
-        }, 500000);
-        
-        return;
-      } catch (error: any) {
-        // Manejar diferentes tipos de errores
-        const errorMessage = error.message || String(error);
-        logger.error(`Error en intento ${currentAttempt}/${config.maxAttempts}: ${errorMessage}`);
-        
-        // Agregar mensaje al estado de errores
-        setLoadingErrors(prev => [...prev, `Intento ${currentAttempt}: ${errorMessage.substring(0, 50)}${errorMessage.length > 50 ? '...' : ''}`]);
-        
-        // Esperar antes de reintentar (excepto en el último intento)
-        if (currentAttempt < config.maxAttempts) {
-          await new Promise(resolve => setTimeout(resolve, config.retryDelay));
-        } else {
-          setError(`No se pudo cargar el modelo después de ${config.maxAttempts} intentos: ${errorMessage}`);
-          setLoading(false);
-          setModelLoading(false);
-        }
+          modelEntity.setAttribute('gltf-model', url);
+          modelEntity.setAttribute('scale', isMobileDevice ? '0.5 0.5 0.5' : '1 1 1');
+        }, 200);
       }
+      
+      // Manejar eventos
+      // Eventos para A-Frame 1.0.0+
+      modelEntity.addEventListener('model-loaded', (event) => {
+        logger.info('Evento model-loaded disparado', event);
+        setLoading(false);
+        setModelLoading(false);
+        setCurrentStep('modelo cargado');
+      });
+      
+      modelEntity.addEventListener('model-error', (event) => {
+        logger.error('Evento model-error disparado', event);
+        
+        // Intentar con otra URL si esta falla
+        if (url === MODEL_URLS.remote) {
+          logger.warn('Fallback a modelo simplificado');
+          loadModel(MODEL_URLS.simplified);
+        } else if (url === MODEL_URLS.simplified) {
+          logger.warn('Fallback a modelo local');
+          loadModel(MODEL_URLS.local);
+        } else if (url === MODEL_URLS.local) {
+          logger.warn('Fallback a modelo de respaldo');
+          loadModel(MODEL_URLS.fallback);
+        } else {
+          // Si todos los intentos fallan, mostrar el cubo
+          showFallbackModel();
+        }
+      });
+      
+      // Verificar la carga después de un tiempo razonable
+      const timeout = setTimeout(() => {
+        const hasModel = modelEntity.getAttribute('gltf-model');
+        const hasObject = (modelEntity as any).getObject3D && (modelEntity as any).getObject3D('mesh');
+        
+        logger.info(`Verificando carga de modelo: hasModel=${!!hasModel}, hasObject=${!!hasObject}`);
+        
+        if (!hasObject) {
+          // Manejar de manera similar a un error de carga
+          logger.warn('Timeout de verificación - modelo no cargado');
+          
+          if (url === MODEL_URLS.remote) {
+            logger.warn('Timeout: intentando con modelo simplificado');
+            loadModel(MODEL_URLS.simplified);
+          } else if (url === MODEL_URLS.simplified) {
+            logger.warn('Timeout: intentando con modelo local');
+            loadModel(MODEL_URLS.local);
+          } else if (url === MODEL_URLS.local) {
+            logger.warn('Timeout: intentando con modelo de respaldo');
+            loadModel(MODEL_URLS.fallback);
+          } else {
+            // Si todos fallan, mostrar el fallback
+            showFallbackModel();
+          }
+        }
+      }, 30000);
+      
+      // Función para mostrar el modelo de respaldo
+      const showFallbackModel = () => {
+        logger.error('No se pudo cargar ningún modelo 3D, mostrando respaldo');
+        setError('No se pudo cargar el modelo 3D. Se muestra una versión simplificada.');
+        
+        // Mostrar el cubo de respaldo
+        const fallbackModel = document.getElementById('fallback-model');
+        if (fallbackModel) {
+          fallbackModel.setAttribute('visible', 'true');
+        }
+        
+        setLoading(false);
+        setModelLoading(false);
+        setCurrentStep('usando modelo de respaldo');
+      };
+      
+      // Limpiar timeout si el componente se desmonta
+      useEffect(() => {
+        return () => {
+          if (timeout) {
+            clearTimeout(timeout);
+          }
+        };
+      }, [timeout]);
+    } catch (error: any) {
+      logger.error('Error general al cargar el modelo:', error);
+      setError(`Error al cargar el modelo: ${error.message || 'Error desconocido'}`);
+      
+      // Mostrar cubo de respaldo
+      const fallbackModel = document.getElementById('fallback-model');
+      if (fallbackModel) {
+        fallbackModel.setAttribute('visible', 'true');
+      }
+      
+      setLoading(false);
+      setModelLoading(false);
     }
   };
 
@@ -876,82 +790,46 @@ const ARViewTest = () => {
 
   // Función para inicializar AR con opciones específicas para iOS
   const initializeAR = async (): Promise<void> => {
-    logger.info('Inicializando AR...');
+    logger.info('Inicializando AR simplificado...');
     setCurrentStep('inicializando realidad aumentada');
     
     try {
       // Verificar modelos locales primero
       const localModelsAvailable = await checkLocalResources();
+      logger.info(`Modelos locales disponibles: ${localModelsAvailable}`);
       
-      // Solicitar permisos de cámara de forma diferente según la plataforma
-      if (deviceInfo.isIOS) {
-        // En iOS, necesitamos manejar permisos de manera diferente
-        try {
-          // En Safari de iOS, getUserMedia puede comportarse de manera diferente
-          const stream = await navigator.mediaDevices.getUserMedia({ 
-            video: {
-              facingMode: 'environment', 
-              width: { ideal: 1280 },
-              height: { ideal: 720 }
-            },
-            audio: false
-          });
-          
-          // Si llegamos aquí, tenemos acceso a la cámara
-          logger.info('Permiso de cámara concedido en iOS');
-          
-          // Detener el stream inmediatamente para evitar bloqueos en iOS
-          stream.getTracks().forEach(track => track.stop());
-          
-          // Inicializar componentes AR
-          await loadModel(localModelsAvailable ? MODEL_URLS.local : MODEL_URLS.backup);
-          
-        } catch (error: any) {
-          // Manejo específico de errores para iOS
-          if (error.name === 'NotAllowedError' || error.message.includes('denied')) {
-            setError('Permiso de cámara denegado. En iOS, debes permitir el acceso a la cámara desde Configuración > Safari > Cámara.');
-          } else if (error.name === 'NotFoundError') {
-            setError('No se pudo encontrar la cámara trasera en este dispositivo iOS.');
-          } else if (error.name === 'NotReadableError' || error.message.includes('Could not start video source')) {
-            setError('No se puede acceder a la cámara. Cierra otras aplicaciones que podrían estar usando la cámara.');
-          } else if (deviceInfo.iOSVersion < 13) {
-            setError(`Tu versión de iOS (${deviceInfo.iOSVersion}) podría no ser compatible con AR. Se recomienda iOS 13 o superior.`);
-          } else {
-            setError(`Error al inicializar AR en iOS: ${error.message || 'Error desconocido'}`);
-          }
-          logger.error('Error en inicialización de AR para iOS:', error);
-          return;
-        }
-      } else {
-        // Para dispositivos no iOS
-        try {
-          // Verificar permisos de cámara
-          const stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { facingMode: 'environment' }, 
-            audio: false 
-          });
-          
-          // Si llegamos aquí, tenemos acceso a la cámara
-          logger.info('Permiso de cámara concedido');
-          
-          // Detener el stream, ya que AR.js gestionará la cámara
-          stream.getTracks().forEach(track => track.stop());
-          
-          // Cargar el modelo 3D
-          await loadModel(localModelsAvailable ? MODEL_URLS.local : MODEL_URLS.remote);
-          
-        } catch (error: any) {
-          // Manejo genérico de errores para otros dispositivos
-          if (error.name === 'NotAllowedError') {
-            setError('Permiso de cámara denegado. Por favor, permite el acceso a la cámara e intenta de nuevo.');
-          } else {
-            setError(`Error al inicializar AR: ${error.message || 'Error desconocido'}`);
-          }
-          logger.error('Error en inicialización de AR:', error);
-          return;
-        }
+      // Verificar permisos de cámara
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { 
+            facingMode: 'environment',
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }, 
+          audio: false 
+        });
+        
+        // Liberamos el stream para que A-Frame pueda usarlo
+        stream.getTracks().forEach(track => track.stop());
+        logger.info('Permiso de cámara concedido, iniciando AR');
+        
+        // Activar AR
+        setArReady(true);
+        
+        // Cargar el modelo - elegir el adecuado según plataforma
+        const modelUrl = isMobileDevice ? 
+          (localModelsAvailable ? MODEL_URLS.local : MODEL_URLS.simplified) : 
+          (localModelsAvailable ? MODEL_URLS.local : MODEL_URLS.remote);
+        
+        // Pequeño retraso para asegurar que A-Frame esté listo
+        setTimeout(() => {
+          loadModel(modelUrl);
+        }, 1000);
+        
+      } catch (error: any) {
+        setError(`Error al acceder a la cámara: ${error.message || 'Error desconocido'}`);
+        logger.error('Error al inicializar cámara AR:', error);
       }
-      
     } catch (error: any) {
       setError(`Error al inicializar AR: ${error.message || 'Error desconocido'}`);
       logger.error('Error general en inicialización:', error);
@@ -963,29 +841,37 @@ const ARViewTest = () => {
     const baseHTML = `
       <a-scene 
         vr-mode-ui="enabled: false"
-        renderer="logarithmicDepthBuffer: true; ${deviceInfo.isIOS ? 'precision: medium; antialias: false; colorManagement: false;' : 'precision: high; antialias: true; colorManagement: true;'}"
+        renderer="logarithmicDepthBuffer: true; ${deviceInfo.isIOS ? 'precision: medium; antialias: false;' : 'precision: high; antialias: true;'} colorManagement: false; sortObjects: true; physicallyCorrectLights: false;"
         embedded 
-        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono; maxDetectionRate: 30; canvasWidth: 640; canvasHeight: 480;"
         loading-screen="enabled: false"
-        ${deviceInfo.isIOS ? 'device-orientation-permission-ui="enabled: true"' : ''}
+        inspector="url: https://cdn.jsdelivr.net/gh/aframevr/aframe-inspector@master/dist/aframe-inspector.min.js"
       >
-        <a-assets>
-          <!-- Definir un modelo de respaldo mínimo para garantizar que algo se muestre -->
-          <a-asset-item id="backup-model" src="https://models.babylonjs.com/CornellBox/cornellBox.glb"></a-asset-item>
+        <!-- Precargar DRACO decoder para mejor compresión de modelos -->
+        <a-assets timeout="10000">
+          <a-asset-item id="placeholder-model" src="${MODEL_URLS.placeholder}"></a-asset-item>
         </a-assets>
         
-        <a-camera gps-camera rotation-reader></a-camera>
+        <a-camera 
+          gps-projected-camera 
+          rotation-reader 
+          look-controls="enabled: false"
+          position="0 1.6 0"
+          near="0.1"
+          far="10000"
+        ></a-camera>
         
         <!-- Contenedor principal para el modelo GLB -->
         <a-entity 
           id="model-container" 
           position="0 0 -5" 
           rotation="0 0 0"
-          ${deviceInfo.isIOS ? 'animation="property: rotation; to: 0 360 0; loop: true; dur: 10000; easing: linear;"' : ''}
+          animation="property: rotation; to: 0 360 0; loop: true; dur: 10000; easing: linear;"
+          draco-decoder="legacy: false"
+          oculus-thumbstick-controls="acceleration: 20"
         ></a-entity>
         
-        <!-- Modelo de respaldo que se mostrará si la carga falla -->
-        ${isMobileDevice ? `
+        <!-- Modelo de respaldo básico -->
         <a-box 
           id="fallback-model" 
           position="0 0 -5" 
@@ -993,7 +879,11 @@ const ARViewTest = () => {
           color="#4CC3D9"
           visible="false"
           animation="property: rotation; to: 0 360 0; dur: 10000; easing: linear; loop: true"
-        ></a-box>` : ''}
+        ></a-box>
+        
+        <!-- Luces para mejor visualización -->
+        <a-light type="ambient" color="#CCC" intensity="0.7"></a-light>
+        <a-light type="directional" color="#FFF" intensity="0.7" position="1 1 1"></a-light>
       </a-scene>
     `;
     
