@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import 'aframe';
 import 'aframe-ar';
@@ -8,122 +8,85 @@ import '../styles/ARView.css';
 
 const ARViewTest: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
-  const [cameraReady, setCameraReady] = useState(false);
-  const sceneContainerRef = useRef<HTMLDivElement>(null);
+  const [arReady, setArReady] = useState(false);
   
   // Distancia de prueba en metros (modelo aparecerá a esta distancia del usuario)
   const testDistance = 15;
   // Ángulo aleatorio para posicionar el modelo (0-360 grados)
   const randomAngle = Math.random() * 2 * Math.PI;
 
-  // Solicitar acceso a la cámara explícitamente
   useEffect(() => {
-    const requestCameraAccess = async () => {
-      try {
-        await navigator.mediaDevices.getUserMedia({ video: true });
-        setCameraReady(true);
-      } catch (err) {
+    // Solicitar acceso a la cámara explícitamente antes de inicializar AR.js
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(() => {
+        // Pequeño retraso para asegurar que la cámara esté lista
+        setTimeout(() => {
+          setArReady(true);
+        }, 1000);
+      })
+      .catch(err => {
         setError(`Error al acceder a la cámara: ${err instanceof Error ? err.message : String(err)}`);
-      }
-    };
+      });
 
-    requestCameraAccess();
+    // Manejar errores de carga del modelo
+    document.addEventListener('model-error', () => {
+      setError('Error al cargar el modelo 3D. Por favor, verifica tu conexión a internet.');
+    });
   }, []);
 
   useEffect(() => {
-    if (!cameraReady) return;
+    if (!arReady) return;
 
-    // Inicializar A-Frame solo cuando la cámara esté lista
-    const initAframe = () => {
-      if (!sceneContainerRef.current) return;
-      
-      // Crear elementos A-Frame manualmente
-      const scene = document.createElement('a-scene');
-      scene.setAttribute('embedded', '');
-      scene.setAttribute('arjs', 'sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; cameraParametersUrl: https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@master/data/camera_para.dat;');
-      scene.setAttribute('renderer', 'logarithmicDepthBuffer: true; precision: medium;');
-      scene.setAttribute('vr-mode-ui', 'enabled: false');
-      
-      // Cámara
-      const camera = document.createElement('a-entity');
-      camera.setAttribute('camera', '');
-      camera.setAttribute('look-controls', '');
-      camera.setAttribute('wasd-controls', '');
-      camera.setAttribute('position', '0 1.6 0');
-      scene.appendChild(camera);
-      
-      // Modelo 3D
-      const model = document.createElement('a-entity');
-      model.id = 'castillo-model';
-      model.setAttribute('position', `0 0 -${testDistance}`);
-      model.setAttribute('scale', '1 1 1');
-      model.setAttribute('rotation', '0 0 0');
-      model.setAttribute('gltf-model', 'https://jeanrua.com/models/SantaMaria_futuro.glb');
-      scene.appendChild(model);
-      
-      // Indicador de dirección hacia el modelo
-      const directionIndicator = document.createElement('a-entity');
-      directionIndicator.id = 'direction-indicator';
-      
-      const arrow = document.createElement('a-box');
-      arrow.setAttribute('position', '0 0.5 -2');
-      arrow.setAttribute('color', 'green');
-      arrow.setAttribute('depth', '0.1');
-      arrow.setAttribute('height', '0.1');
-      arrow.setAttribute('width', '0.5');
-      directionIndicator.appendChild(arrow);
-      
-      const text = document.createElement('a-text');
-      text.setAttribute('value', 'Modelo 3D');
-      text.setAttribute('position', '0 0.7 -2');
-      text.setAttribute('color', 'white');
-      text.setAttribute('align', 'center');
-      directionIndicator.appendChild(text);
-      
-      scene.appendChild(directionIndicator);
-      
-      // Limpiar contenedor y añadir escena
-      sceneContainerRef.current.innerHTML = '';
-      sceneContainerRef.current.appendChild(scene);
-      
-      // Escuchar por error de cámara
-      scene.addEventListener('camera-error', () => {
-        setError('Error al inicializar la cámara de AR.js. Por favor, recarga la página e intenta de nuevo.');
-      });
-      
-      if ('geolocation' in navigator) {
-        // Obtener la ubicación actual
-        navigator.geolocation.watchPosition(
-          (position) => {
-            // Posicionar el modelo a una distancia fija, en una dirección aleatoria
-            const dx = testDistance * Math.sin(randomAngle);
-            const dz = testDistance * Math.cos(randomAngle);
-            
-            // Actualizar la posición del modelo dinámicamente
-            if (model) {
-              model.setAttribute('position', `${dx} 0 ${dz}`);
+    if ('geolocation' in navigator) {
+      navigator.geolocation.watchPosition(
+        (position) => {
+          // Posicionar el modelo a una distancia fija, en una dirección aleatoria
+          const dx = testDistance * Math.sin(randomAngle);
+          const dz = testDistance * Math.cos(randomAngle);
+          
+          // Actualizar la posición del modelo dinámicamente usando el sistema de eventos de A-Frame
+          setTimeout(() => {
+            const modelEl = document.querySelector('#castillo-model');
+            if (modelEl) {
+              modelEl.setAttribute('position', `${dx} 0 ${dz}`);
             }
-          },
-          (err) => {
-            setError(`Error accediendo a la ubicación: ${err.message}`);
-          },
-          { enableHighAccuracy: true }
-        );
-      } else {
-        setError('La geolocalización no está disponible en este dispositivo.');
-      }
-    };
+          }, 1000);
+        },
+        (err) => {
+          setError(`Error accediendo a la ubicación: ${err.message}`);
+        },
+        { enableHighAccuracy: true }
+      );
+    } else {
+      setError('La geolocalización no está disponible en este dispositivo.');
+    }
+  }, [arReady, randomAngle, testDistance]);
 
-    // Inicializar A-Frame
-    initAframe();
-
-    // Limpiar al desmontar
-    return () => {
-      if (sceneContainerRef.current) {
-        sceneContainerRef.current.innerHTML = '';
-      }
-    };
-  }, [cameraReady, randomAngle, testDistance]);
+  // Contenido A-Frame como HTML
+  const aframeHTML = `
+    <a-scene 
+      embedded
+      arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;"
+      vr-mode-ui="enabled: false"
+      renderer="antialias: true; alpha: true; precision: mediump;"
+      id="scene">
+      <a-camera gps-camera rotation-reader></a-camera>
+      
+      <a-entity
+        id="castillo-model"
+        position="0 0 -5"
+        scale="1 1 1"
+        rotation="0 0 0"
+        gltf-model="https://jeanrua.com/models/SantaMaria_futuro.glb">
+      </a-entity>
+      
+      <!-- Indicador de dirección hacia el modelo -->
+      <a-entity id="direction-indicator">
+        <a-box position="0 0.5 -2" color="green" depth="0.1" height="0.1" width="0.5"></a-box>
+        <a-text value="Modelo 3D" position="0 0.7 -2" color="white" align="center"></a-text>
+      </a-entity>
+    </a-scene>
+  `;
 
   return (
     <div className="ar-container">
@@ -134,9 +97,9 @@ const ARViewTest: React.FC = () => {
         </div>
       )}
       
-      {!error && !cameraReady && (
+      {!arReady && !error && (
         <div className="loading-overlay">
-          <p>Solicitando acceso a la cámara...</p>
+          <p>Inicializando cámara...</p>
         </div>
       )}
       
@@ -146,7 +109,8 @@ const ARViewTest: React.FC = () => {
       
       <Link to="/" className="back-button-ar">Volver</Link>
       
-      <div ref={sceneContainerRef} className="scene-container"></div>
+      {/* A-Frame Scene */}
+      {arReady && <div dangerouslySetInnerHTML={{ __html: aframeHTML }} />}
     </div>
   );
 };

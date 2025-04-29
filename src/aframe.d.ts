@@ -13,6 +13,8 @@ declare namespace JSX {
     'a-camera': any;
     'a-marker': any;
     'a-text': any;
+    'a-cursor': any;
+    'a-light': any;
   }
 }
 
