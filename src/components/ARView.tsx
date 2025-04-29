@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import 'aframe';
 import 'aframe-ar';
@@ -15,8 +15,8 @@ const MODEL_CACHE_VERSION = 'v1';
 const TIMEOUTS = {
   modelLoad: 10000000, // 10,000 segundos
   cameraInit: 60000,    // 60 segundos
-  verifyModel: 120000,  // 2 minutos
-  retryDelay: 30000     // 30 segundos
+  sceneSetup: 5000,     // 5 segundos para configurar escena
+  retryDelay: 30000     // 30 segundos entre reintentos
 };
 
 const ARView: React.FC = () => {
@@ -25,7 +25,9 @@ const ARView: React.FC = () => {
   const [modelLoading, setModelLoading] = useState(true);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [modelBuffer, setModelBuffer] = useState<ArrayBuffer | null>(null);
-
+  const [blobUrl, setBlobUrl] = useState<string>('');
+  const sceneRef = useRef<HTMLDivElement | null>(null);
+  
   // Coordenadas del objetivo (39°28'09.4"N 0°25'53.5"W)
   const targetLat = 39.469278;
   const targetLng = -0.431528;
@@ -212,7 +214,7 @@ const ARView: React.FC = () => {
           return null;
         }
         
-        // Esperar antes del siguiente intento (backoff exponencial) con tiempo de espera más largo
+        // Esperar antes del siguiente intento con tiempo de espera largo
         await new Promise(resolve => setTimeout(resolve, TIMEOUTS.retryDelay));
       }
     }
@@ -232,6 +234,22 @@ const ARView: React.FC = () => {
     
     return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
   };
+
+  // Obtener URL de objeto para el modelo
+  const createModelBlobUrl = useCallback((buffer: ArrayBuffer): string => {
+    try {
+      // Crear un Blob desde el ArrayBuffer
+      const blob = new Blob([buffer], { type: 'model/gltf-binary' });
+      
+      // Crear una URL de objeto para el blob
+      const objectURL = URL.createObjectURL(blob);
+      console.log('URL de objeto creada correctamente');
+      return objectURL;
+    } catch (err) {
+      console.error('Error al crear URL de objeto para el modelo', err);
+      return MODEL_URL;
+    }
+  }, []);
 
   useEffect(() => {
     // Solicitar acceso a la cámara explícitamente antes de inicializar AR.js
@@ -260,6 +278,11 @@ const ARView: React.FC = () => {
         if (buffer) {
           console.log(`Modelo cargado exitosamente: ${formatBytes(buffer.byteLength)}`);
           setModelBuffer(buffer);
+          
+          // Crear URL de objeto para el modelo
+          const url = createModelBlobUrl(buffer);
+          setBlobUrl(url);
+          
           setModelLoading(false);
         } else {
           console.error('La carga del modelo devolvió null');
@@ -270,18 +293,52 @@ const ARView: React.FC = () => {
         setError('Error al cargar el modelo 3D. Por favor, verifica tu conexión a internet e intenta nuevamente.');
       });
 
-    // Escuchar eventos de carga del modelo en A-Frame
-    document.addEventListener('model-loaded', () => {
-      console.log('Evento model-loaded recibido');
-      setModelLoading(false);
-    });
-
+    // Limpiar
     return () => {
-      document.removeEventListener('model-loaded', () => {
-        setModelLoading(false);
-      });
+      // Liberar blob URL al desmontar
+      if (blobUrl) {
+        URL.revokeObjectURL(blobUrl);
+      }
+      
+      document.removeEventListener('model-error', () => {});
     };
-  }, [loadModelOptimized]);
+  }, [loadModelOptimized, createModelBlobUrl]);
+
+  // Configurar la escena AR cuando esté lista y el modelo esté cargado
+  useEffect(() => {
+    if (!arReady || !sceneRef.current || modelLoading) return;
+    
+    // Configurar la escena una vez que la cámara y el modelo estén listos
+    console.log('Configurando escena AR...');
+    
+    // Dar tiempo a A-Frame para inicializarse
+    setTimeout(() => {
+      try {
+        // Actualizar el componente modelo
+        const modelEntity = document.querySelector('#castillo-model');
+        if (modelEntity && blobUrl) {
+          console.log('Aplicando modelo a la entidad...');
+          modelEntity.setAttribute('gltf-model', blobUrl);
+          modelEntity.setAttribute('visible', 'true');
+          
+          // Ocultar indicador de progreso
+          const progressIndicator = document.querySelector('#progress-indicator');
+          if (progressIndicator) {
+            progressIndicator.setAttribute('visible', 'false');
+          }
+          
+          // Disparar evento modelLoaded para el placeholder
+          const placeholderModel = document.querySelector('#placeholder-model');
+          if (placeholderModel) {
+            placeholderModel.dispatchEvent(new CustomEvent('modelLoaded'));
+          }
+        }
+      } catch (err) {
+        console.error('Error al configurar modelo en escena:', err);
+      }
+    }, TIMEOUTS.sceneSetup);
+    
+  }, [arReady, modelLoading, blobUrl]);
 
   useEffect(() => {
     if (!arReady) return;
@@ -337,25 +394,7 @@ const ARView: React.FC = () => {
     return R * y;
   };
 
-  // Obtener URL de objeto para el modelo
-  const getModelObjectURL = useCallback(() => {
-    if (!modelBuffer) return '';
-
-    try {
-      // Crear un Blob desde el ArrayBuffer
-      const blob = new Blob([modelBuffer], { type: 'model/gltf-binary' });
-      
-      // Crear una URL de objeto para el blob
-      const objectURL = URL.createObjectURL(blob);
-      console.log('URL de objeto creada correctamente');
-      return objectURL;
-    } catch (err) {
-      console.error('Error al crear URL de objeto para el modelo', err);
-      return MODEL_URL;
-    }
-  }, [modelBuffer]);
-
-  // Contenido A-Frame como HTML con optimizaciones de rendimiento
+  // Contenido A-Frame como HTML (versión simplificada y optimizada)
   const aframeHTML = `
     <a-scene 
       embedded
@@ -364,10 +403,6 @@ const ARView: React.FC = () => {
       renderer="antialias: true; alpha: true; precision: mediump; logarithmicDepthBuffer: true;"
       id="scene"
       loading-screen="enabled: false">
-      <a-assets timeout="6000000">
-        <a-asset-item id="castillo-asset" src="${modelBuffer ? getModelObjectURL() : MODEL_URL}" 
-          response-type="arraybuffer" crossorigin="anonymous"></a-asset-item>
-      </a-assets>
       
       <a-camera gps-camera rotation-reader></a-camera>
       
@@ -375,15 +410,13 @@ const ARView: React.FC = () => {
       <a-box id="placeholder-model" position="0 0 -5" scale="2 2 2" color="#AAAAAA" opacity="0.5"
         animation="property: opacity; to: 0; dur: 1000; easing: linear; startEvents: modelLoaded"></a-box>
       
-      <!-- Modelo 3D principal -->
+      <!-- Modelo 3D principal - Sin URL inicial para evitar doble carga -->
       <a-entity
         id="castillo-model"
         position="0 0 -5"
         scale="1 1 1"
         rotation="0 0 0"
-        gltf-model="#castillo-asset"
-        visible="${!modelLoading}"
-        animation="property: visible; to: true; dur: 1; delay: 500; startEvents: loaded">
+        visible="false">
       </a-entity>
       
       <a-entity id="progress-indicator" position="0 0 -3" visible="${modelLoading}">
@@ -401,27 +434,10 @@ const ARView: React.FC = () => {
     
     const progressBar = document.querySelector('#progress-bar');
     const progressText = document.querySelector('#progress-text');
-    const progressIndicator = document.querySelector('#progress-indicator');
-    const placeholderModel = document.querySelector('#placeholder-model');
-    const castilloModel = document.querySelector('#castillo-model');
     
     if (progressBar && progressText) {
       progressBar.setAttribute('scale', `${loadingProgress/100} 1 1`);
       progressText.setAttribute('value', `${loadingProgress}%`);
-    }
-    
-    if (loadingProgress === 100 && progressIndicator) {
-      // Tiempo de espera más largo para la transición
-      setTimeout(() => {
-        console.log('Carga de modelo completa, mostrando modelo 3D');
-        if (progressIndicator) {
-          progressIndicator.setAttribute('visible', 'false');
-        }
-        if (placeholderModel && castilloModel) {
-          placeholderModel.dispatchEvent(new CustomEvent('modelLoaded'));
-          castilloModel.setAttribute('visible', 'true');
-        }
-      }, TIMEOUTS.verifyModel / 20); // Un veinteavo del timeout total
     }
   }, [loadingProgress, arReady]);
 
@@ -452,7 +468,7 @@ const ARView: React.FC = () => {
       <Link to="/" className="back-button-ar">Volver</Link>
       
       {/* A-Frame Scene */}
-      {arReady && <div dangerouslySetInnerHTML={{ __html: aframeHTML }} />}
+      {arReady && <div ref={sceneRef} dangerouslySetInnerHTML={{ __html: aframeHTML }} />}
     </div>
   );
 };
