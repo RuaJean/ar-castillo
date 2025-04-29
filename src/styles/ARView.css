@@ -245,4 +245,52 @@ a-text {
     padding: 0.3rem 0.7rem;
     font-size: 0.8rem;
   }
+}
+
+/* Botón para reintentar permisos */
+.retry-button {
+  background-color: #4285f4;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 10px 20px;
+  font-size: 16px;
+  cursor: pointer;
+  margin-top: 15px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  transition: background-color 0.2s ease;
+}
+
+.retry-button:hover {
+  background-color: #3367d6;
+}
+
+/* Mejoras para móviles */
+@media (max-width: 767px) {
+  .loading-overlay, .error-overlay {
+    font-size: 14px;
+    padding: 15px;
+  }
+  
+  .back-button, .back-button-ar {
+    font-size: 14px;
+    padding: 8px 16px;
+  }
+  
+  .model-loading-indicator {
+    width: 85%;
+    padding: 10px;
+  }
+  
+  .debug-panel {
+    max-width: 120px;
+    font-size: 9px;
+    opacity: 0.7;
+  }
+  
+  .ar-info-overlay {
+    bottom: 60px;
+    font-size: 12px;
+    padding: 8px 12px;
+  }
 } 
