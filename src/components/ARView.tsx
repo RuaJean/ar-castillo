@@ -323,7 +323,7 @@ const ARView: React.FC = () => {
       renderer="antialias: true; alpha: true; precision: mediump; logarithmicDepthBuffer: true;"
       id="scene"
       loading-screen="enabled: false">
-      <a-assets timeout="60000">
+      <a-assets timeout="6000000">
         <a-asset-item id="castillo-asset" src="${modelBuffer ? getModelObjectURL() : MODEL_URL}" 
           response-type="arraybuffer" crossorigin="anonymous"></a-asset-item>
       </a-assets>
