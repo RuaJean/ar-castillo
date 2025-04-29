@@ -178,10 +178,11 @@ const ARViewTest: React.FC = () => {
   const [modelLoadAttempts, setModelLoadAttempts] = useState(0);
   const [globalAttempts, setGlobalAttempts] = useState(0); // Contador global para evitar bucles infinitos
   const [isLastAttempt, setIsLastAttempt] = useState(false); // Flag para marcar el último intento
-  const [currentModelUrl, setCurrentModelUrl] = useState('');
+  const [currentModelUrl, setCurrentModelUrl] = useState<string | null>(null);
   const [loadingErrors, setLoadingErrors] = useState<string[]>([]);
   const sceneContainerRef = useRef<HTMLDivElement>(null);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
+  const initialLoadDone = useRef(false); // Flag para controlar la carga inicial
   
   // Distancia de prueba en metros (modelo aparecerá a esta distancia del usuario)
   const testDistance = 15;
@@ -189,15 +190,17 @@ const ARViewTest: React.FC = () => {
   const randomAngle = Math.random() * 2 * Math.PI;
 
   // Seleccionar la URL del modelo más adecuada para la situación actual
-  const selectModelUrl = () => {
-    // Para móviles, intentar primero una versión específica para móviles si existe
-    if (isMobile && modelLoadAttempts === 0) {
+  const selectModelUrl = (attemptNumber: number): string => {
+    logger.info(`Seleccionando URL para intento: ${attemptNumber}`);
+    
+    // Para móviles, intentar primero una versión específica si es el intento 0
+    if (isMobile && attemptNumber === 0) {
       logger.info('Primer intento en móvil: usando versión para móviles');
-      return MODEL_URLS.mobile || MODEL_URLS.fallback;
+      return MODEL_URLS.mobile || MODEL_URLS.fallback; // Fallback si no hay versión móvil
     }
     
-    if (modelLoadAttempts === 0) {
-      // Primera carga: usar remoto si estamos en HTTPS, local si estamos en HTTP
+    if (attemptNumber === 0) {
+      // Primer intento (no móvil, o móvil sin versión específica)
       if (window.location.protocol === 'https:') {
         logger.info('Primer intento: usando URL remota');
         return MODEL_URLS.remote;
@@ -205,20 +208,18 @@ const ARViewTest: React.FC = () => {
         logger.info('Primer intento en HTTP: usando URL local');
         return MODEL_URLS.local;
       }
-    } else if (modelLoadAttempts === 1) {
-      // Para móviles, ir directamente al fallback en el segundo intento
+    } else if (attemptNumber === 1) {
+      // Segundo intento
       if (isMobile) {
-        logger.info('Segundo intento en móvil: usando modelo simplificado');
+        logger.info('Segundo intento en móvil: usando modelo simplificado (fallback)');
         return MODEL_URLS.fallback;
+      } else {
+        logger.info('Segundo intento (no móvil): usando URL de backup GitHub');
+        return MODEL_URLS.backup;
       }
-      
-      // Segundo intento: usar local si el primer intento fue remoto, o backup si ya intentamos local
-      const newUrl = currentModelUrl === MODEL_URLS.remote ? MODEL_URLS.local : MODEL_URLS.backup;
-      logger.info(`Segundo intento: usando ${newUrl === MODEL_URLS.local ? 'URL local' : 'URL de backup GitHub'}`);
-      return newUrl;
-    } else {
-      // Último recurso: modelo simplificado fallback
-      logger.info('Último intento: usando modelo simplificado');
+    } else { // attemptNumber >= 2
+      // Último recurso (tercer intento o superior)
+      logger.info(`Intento ${attemptNumber + 1}: usando modelo simplificado (fallback)`);
       return MODEL_URLS.fallback;
     }
   };
@@ -235,10 +236,7 @@ const ARViewTest: React.FC = () => {
       logEnvironmentInfo();
     }
     
-    // Seleccionar URL inicial
-    const initialUrl = selectModelUrl();
-    setCurrentModelUrl(initialUrl);
-    logger.info(`URL inicial seleccionada: ${initialUrl}`);
+    // NO seleccionamos URL inicial aquí, se hará en el efecto de arReady
     
     // Configurar depuración de A-Frame de forma segura (no en móviles)
     if (DEBUG && !isMobile) {
@@ -266,33 +264,20 @@ const ARViewTest: React.FC = () => {
     document.addEventListener('model-error', (event) => {
       logger.error('Evento model-error disparado', event);
       // No establecer error inmediatamente para permitir reintentos
-      setLoadingErrors(prev => [...prev, 'Error al cargar el modelo 3D']);
-    });
-
-    // Monitorear la carga de la escena A-Frame
-    document.addEventListener('loaded', () => {
-      logger.info('Escena A-Frame cargada completamente');
-    });
-    
-    // También escuchar eventos específicos de A-Frame
-    ['loaded', 'renderstart', 'renderstop', 'enter-vr', 'exit-vr', 'camera-ready'].forEach(eventName => {
-      document.addEventListener(eventName, () => {
-        logger.info(`Evento A-Frame capturado: ${eventName}`);
-      });
+      setLoadingErrors(prev => [...prev, 'Error al cargar el modelo 3D (evento A-Frame)']);
     });
 
     // Limpiar listeners al desmontar
     return () => {
       logger.info('Desmontando componente ARViewTest');
       document.removeEventListener('model-error', () => {});
-      document.removeEventListener('loaded', () => {});
       window.removeEventListener('error', () => {});
       window.removeEventListener('unhandledrejection', () => {});
-      ['loaded', 'renderstart', 'renderstop', 'enter-vr', 'exit-vr', 'camera-ready'].forEach(eventName => {
-        document.removeEventListener(eventName, () => {});
-      });
+      if (xhrRef.current) {
+        xhrRef.current.abort(); // Asegurar que se aborta al desmontar
+      }
     };
-  }, []);
+  }, []); // Vacío para ejecutar solo una vez al montar
 
   // Manejo de cámara y permiso de video
   useEffect(() => {
@@ -329,20 +314,23 @@ const ARViewTest: React.FC = () => {
 
   // Función para cargar el modelo con manejo avanzado de errores y reintentos
   const loadModel = (url: string) => {
-    logger.info(`Iniciando carga del modelo desde: ${url}`);
+    logger.info(`Intentando cargar modelo desde: ${url} (Intento global: ${globalAttempts + 1})`);
 
-    // Control de seguridad para evitar bucles infinitos
-    setGlobalAttempts(prev => prev + 1);
+    // --- Verificación de intentos globales ANTES de incrementar ---
     if (globalAttempts >= MODEL_LOAD_CONFIG.maxGlobalAttempts) {
-      logger.error(`Excedido número máximo global de intentos (${MODEL_LOAD_CONFIG.maxGlobalAttempts}), deteniendo carga`);
+      logger.error(`Excedido número máximo global de intentos (${MODEL_LOAD_CONFIG.maxGlobalAttempts}), deteniendo carga.`);
       setError(`Error crítico: demasiados intentos fallidos. Por favor, reinicia la aplicación.`);
-      return;
+      setModelLoading(false); // Detener indicador de carga
+      return; 
     }
-
+    // --- Incrementar contador global --- 
+    setGlobalAttempts(prev => prev + 1); 
+    
+    // --- Incrementar contador de intentos de la ronda actual --- 
+    setModelLoadAttempts(prev => prev + 1);
+    
     setModelLoading(true);
     setLoadingProgress(0);
-    // Incrementar contador de intentos al inicio de la carga
-    setModelLoadAttempts(prev => prev + 1); 
 
     // Limpiar cualquier request previa
     if (xhrRef.current) {
@@ -546,90 +534,95 @@ const ARViewTest: React.FC = () => {
 
   // Función para reintentar con otra URL
   const retry = () => {
-    // Verificación de seguridad para prevenir bucles infinitos
+    logger.warn(`Fallo detectado. Intento actual: ${modelLoadAttempts}, Global: ${globalAttempts}`);
+    
+    // --- Verificación de seguridad para prevenir bucles infinitos --- 
     if (globalAttempts >= MODEL_LOAD_CONFIG.maxGlobalAttempts) {
-      logger.error(`Excedido número máximo global de intentos (${MODEL_LOAD_CONFIG.maxGlobalAttempts}), cancelando reintento`);
+      logger.error(`Excedido número máximo global de intentos (${MODEL_LOAD_CONFIG.maxGlobalAttempts}) en retry, cancelando.`);
       setError(`Error crítico: demasiados intentos fallidos. Por favor, reinicia la aplicación.`);
+      setModelLoading(false);
       return;
     }
 
     if (isLastAttempt) {
-      logger.error('Último intento fallido, no hay más reintentos disponibles');
+      logger.error('Último intento (modelo simplificado) fallido, no hay más reintentos disponibles.');
       setError('No se pudo cargar ningún modelo 3D después de múltiples intentos. Por favor, reinicia la aplicación.');
+      setModelLoading(false);
       return;
     }
 
-    // Usar el valor actual del contador de intentos que ya se incrementó
-    if (modelLoadAttempts >= MODEL_LOAD_CONFIG.maxAttempts) { 
-      logger.error('Se alcanzó el máximo de intentos de carga del modelo', {
-        intentos: modelLoadAttempts,
-        errores: loadingErrors
-      });
+    // Verificar si hemos alcanzado el máximo de intentos para la ronda actual
+    if (modelLoadAttempts >= MODEL_LOAD_CONFIG.maxAttempts) {
+      logger.error(`Se alcanzó el máximo de ${MODEL_LOAD_CONFIG.maxAttempts} intentos para esta ronda de carga.`);
 
-      // Si todo falla, tratar de mostrar por lo menos el modelo más simple
-      if (!currentModelUrl.includes('simplified') && currentModelUrl !== MODEL_URLS.fallback) {
-        logger.info('Intentando última opción: modelo ultra simplificado');
+      // Intentar cargar el modelo simplificado como último recurso
+      if (!currentModelUrl || (!currentModelUrl.includes('simplified') && !currentModelUrl.includes('fallback'))) {
+        logger.info('Intentando última opción: modelo ultra simplificado (fallback/simplified).');
 
         // Marcar como último intento para prevenir bucles
         setIsLastAttempt(true);
 
-        // Restablecer estado para este último intento
+        // NO restablecemos contadores, solo el error
         setError(null);
-        setLoadingErrors([]);
-        // NO reiniciar modelLoadAttempts aquí
-        setCurrentModelUrl(MODEL_URLS.simplified);
+        setLoadingErrors([]); 
+        
+        // Usamos la URL simplificada o fallback directamente
+        const finalUrl = MODEL_URLS.simplified || MODEL_URLS.fallback;
+        setCurrentModelUrl(finalUrl);
 
         setTimeout(() => {
           try {
-            loadModel(MODEL_URLS.simplified);
+            // Reiniciamos modelLoadAttempts para esta *última* carga
+            setModelLoadAttempts(0); 
+            loadModel(finalUrl);
           } catch (e) {
-            logger.error('Error en último intento con modelo simplificado', e);
+            logger.error('Error crítico en el último intento con modelo simplificado', e);
             setError('No se pudo cargar ningún modelo 3D. Por favor, inténtalo más tarde.');
+            setModelLoading(false);
           }
         }, MODEL_LOAD_CONFIG.retryDelayMs);
       } else {
-          // Ya se intentó el simplificado o fallback, así que detenemos todo.
-          setError(`No se pudo cargar el modelo 3D después de ${modelLoadAttempts} intentos. 
-                   ${loadingErrors.length > 0 ? `Errores: ${loadingErrors.slice(-3).join(', ')}` : ''}`);
+        // Ya se intentó el simplificado/fallback y falló, o currentModelUrl es null
+        logger.error('El último intento con modelo simplificado/fallback también falló.');
+        setError(`No se pudo cargar el modelo 3D después de ${globalAttempts} intentos totales. Errores: ${loadingErrors.slice(-3).join(', ')}`);
+        setModelLoading(false);
       }
-
-      return; // Importante retornar aquí para no ejecutar el código de reintento normal
+      return; // Detener aquí después de manejar el último intento
     }
 
-    logger.info('Reintentando carga con otra URL', {
-      intentoActual: modelLoadAttempts, // Ya está incrementado
-      maxIntentos: MODEL_LOAD_CONFIG.maxAttempts
-    });
+    // Si no hemos llegado al límite de intentos de esta ronda
+    logger.info(`Reintentando carga (Intento ${modelLoadAttempts + 1}/${MODEL_LOAD_CONFIG.maxAttempts})`);
 
-    const nextUrl = selectModelUrl();
+    // Obtener la siguiente URL basada en el número de intento actual
+    const nextUrl = selectModelUrl(modelLoadAttempts); 
     logger.info(`Seleccionada siguiente URL: ${nextUrl}`);
     setCurrentModelUrl(nextUrl);
 
     // Retraso antes de reintentar
     setTimeout(() => {
+      // No incrementamos modelLoadAttempts aquí, loadModel lo hará
       loadModel(nextUrl);
     }, MODEL_LOAD_CONFIG.retryDelayMs);
   };
 
-  // Manejador de carga del modelo - inicia el proceso y maneja cambios de URL
+  // Manejador de carga del modelo - inicia el proceso cuando AR está listo
   useEffect(() => {
-    if (!arReady) {
-      logger.info('AR no está listo todavía, esperando para cargar el modelo...');
-      return;
+    if (arReady && !initialLoadDone.current && !modelLoading && !error) {
+      logger.info('AR está listo, iniciando carga inicial del modelo.');
+      initialLoadDone.current = true; // Marcar que la carga inicial se ha disparado
+      
+      // Seleccionar la primera URL basada en intento 0
+      const firstUrl = selectModelUrl(0); 
+      setCurrentModelUrl(firstUrl);
+      // Reiniciar contadores antes de la primera carga
+      setGlobalAttempts(0); 
+      setModelLoadAttempts(0);
+      setIsLastAttempt(false);
+      setLoadingErrors([]);
+      
+      loadModel(firstUrl);
     }
-    
-    if (currentModelUrl && modelLoadAttempts === 0) {
-      loadModel(currentModelUrl);
-    }
-    
-    return () => {
-      if (xhrRef.current) {
-        logger.info('Abortando carga del modelo (cleanup)');
-        xhrRef.current.abort();
-        xhrRef.current = null;
-      }
-    };
-  }, [arReady, currentModelUrl]);
+  }, [arReady, modelLoading, error]); // Depender de arReady, modelLoading y error
 
   // Manejo de geolocalización (solo cuando arReady es true)
   useEffect(() => {
@@ -760,13 +753,20 @@ const ARViewTest: React.FC = () => {
   }, [arReady, modelLoading, loadingProgress]);
 
   // Utilidad para formatear bytes en forma legible
-  const formatBytes = (bytes: number, decimals = 2) => {
-    if (bytes === 0) return '0 Bytes';
+  const formatBytes = (bytes: number, decimals = 2): string => {
+    if (bytes === undefined || bytes === null || bytes === 0) return '0 Bytes';
     const k = 1024;
     const dm = decimals < 0 ? 0 : decimals;
     const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    try {
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      // Asegurar que i esté dentro de los límites del array sizes
+      const safeIndex = Math.max(0, Math.min(i, sizes.length - 1)); 
+      return parseFloat((bytes / Math.pow(k, safeIndex)).toFixed(dm)) + ' ' + sizes[safeIndex];
+    } catch (e) {
+      logger.warn(`Error formateando bytes: ${bytes}`, e);
+      return `${bytes} Bytes`;
+    }
   };
 
   // Contenido A-Frame como HTML con optimizaciones de rendimiento y depuración
@@ -829,7 +829,7 @@ const ARViewTest: React.FC = () => {
         <a-entity id="debug-info" position="0 -1 -3">
           <a-text value="Debug Info" position="0 0 0" color="white" align="center" scale="0.3 0.3 0.3"></a-text>
           <a-text id="coords-display" value="Cargando coordenadas..." position="0 -0.2 0" color="white" align="center" scale="0.2 0.2 0.2"></a-text>
-          <a-text id="model-url-display" value="URL: ${currentModelUrl.substring(0, 30)}..." position="0 -0.4 0" color="white" align="center" scale="0.15 0.15 0.15"></a-text>
+          <a-text id="model-url-display" value="URL: ${currentModelUrl?.substring(0, 30) || 'No URL'}..." position="0 -0.4 0" color="white" align="center" scale="0.15 0.15 0.15"></a-text>
           <a-text id="attempts-display" value="Intento: ${modelLoadAttempts}" position="0 -0.6 0" color="white" align="center" scale="0.2 0.2 0.2"></a-text>
         </a-entity>
         ` : ''}
@@ -847,7 +847,7 @@ const ARViewTest: React.FC = () => {
           <p>Progress: {loadingProgress}%</p>
           <p>Attempt: {modelLoadAttempts}</p>
           <p>Global: {globalAttempts}</p>
-          <p>URL: {currentModelUrl.substring(0, 15)}...</p>
+          <p>URL: {currentModelUrl?.substring(0, 15) || 'No URL'}...</p>
           {loadingErrors.length > 0 && (
             <>
               <p style={{color: '#ff6b6b'}}>Errores:</p>
@@ -880,13 +880,8 @@ const ARViewTest: React.FC = () => {
             <div className="progress-bar" style={{ width: `${loadingProgress}%` }}></div>
           </div>
           <p>Cargando modelo 3D: {loadingProgress}%</p>
-          {modelLoadAttempts > 1 && (
-            <p className="retry-message">Intento {modelLoadAttempts}/{MODEL_LOAD_CONFIG.maxAttempts}: {
-              currentModelUrl.includes('local') ? 'Usando copia local' : 
-              currentModelUrl.includes('github') ? 'Usando copia de GitHub' :
-              currentModelUrl.includes('fallback') || currentModelUrl.includes('simplified') ? 'Usando modelo simplificado' : 
-              'Reintentando...'
-            }</p>
+          {(modelLoadAttempts > 0 || globalAttempts > 0) && (
+            <p className="retry-message">Intento {modelLoadAttempts}/{MODEL_LOAD_CONFIG.maxAttempts} (Global: {globalAttempts})</p>
           )}
         </div>
       )}
