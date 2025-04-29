@@ -13,7 +13,15 @@ a-scene {
   display: block;
 }
 
-.error-overlay {
+.scene-container {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.error-overlay, .loading-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -28,6 +36,17 @@ a-scene {
   color: white;
   text-align: center;
   padding: 1rem;
+}
+
+.loading-overlay {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.loading-overlay p {
+  font-size: 1.2rem;
+  background-color: rgba(0, 0, 0, 0.7);
+  padding: 1rem 2rem;
+  border-radius: 8px;
 }
 
 .error-overlay p {
