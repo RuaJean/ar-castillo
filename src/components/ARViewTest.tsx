@@ -30,7 +30,7 @@ const enableAFrameDebug = () => {
 };
 
 // URLs del modelo para distintos escenarios - reducir resolución para modelos grandes
-const MODEL_URL = 'http://jeanrua.com/models/SantaMaria_futuro.glb';
+const MODEL_URL = 'https://jeanrua.com/models/SantaMaria_futuro.glb';
 
 // Registrar información del entorno
 const logEnvironmentInfo = () => {
