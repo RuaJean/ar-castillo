@@ -5,12 +5,9 @@ import 'aframe-ar';
 import 'aframe-extras';
 import 'aframe-look-at-component';
 import '../styles/ARView.css';
-import { createObjectURLFromExternalURL } from '../services/CORSHelper';
 
 const ARView: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
-  const [loadingModel, setLoadingModel] = useState<boolean>(false);
-  const [modelURL, setModelURL] = useState<string | null>(null);
 
   // Coordenadas del objetivo (39°28'09.4"N 0°25'53.5"W)
   const targetLat = 39.469278;
@@ -67,46 +64,6 @@ const ARView: React.FC = () => {
     return R * y;
   };
 
-  // Agregamos manejo CORS para evitar problemas de bloqueo
-  useEffect(() => {
-    // Verificar si ya tenemos el modelo en cache
-    const cachedModelURL = localStorage.getItem('modelObjectURL');
-    if (cachedModelURL) {
-      setModelURL(cachedModelURL);
-      return;
-    }
-
-    // Si no tenemos el modelo en cache, intentamos cargarlo
-    const loadModel = async () => {
-      setLoadingModel(true);
-      try {
-        // Intentamos cargar desde URL externa primero
-        const externalModelURL = "https://jeanrua.com/models/SantaMaria_futuro.glb";
-        const objectURL = await createObjectURLFromExternalURL(externalModelURL);
-        
-        // Guardamos en localStorage para próximas visitas
-        localStorage.setItem('modelObjectURL', objectURL);
-        setModelURL(objectURL);
-        
-        // Actualizamos el modelo una vez que tenemos la URL
-        setTimeout(() => {
-          const model = document.querySelector('#castillo-model') as any;
-          if (model) {
-            model.setAttribute('gltf-model', objectURL);
-          }
-        }, 1000);
-      } catch (e: any) {
-        console.error("Falló carga externa, usando modelo local", e);
-        // Si falla, usamos el modelo local
-        setModelURL("/SantaMaria_futuro.glb");
-      } finally {
-        setLoadingModel(false);
-      }
-    };
-    
-    loadModel();
-  }, []);
-
   // Contenido de A-Frame como HTML
   const aframeContent = `
     <a-scene 
@@ -114,10 +71,6 @@ const ARView: React.FC = () => {
       arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix;"
       renderer="logarithmicDepthBuffer: true; precision: medium;"
       vr-mode-ui="enabled: false">
-      
-      <a-assets timeout="30000">
-        <a-asset-item id="castle-model" src="/SantaMaria_futuro.glb" crossorigin="anonymous"></a-asset-item>
-      </a-assets>
       
       <!-- Cámara con control de gestos -->
       <a-entity camera look-controls wasd-controls position="0 1.6 0"></a-entity>
@@ -128,7 +81,7 @@ const ARView: React.FC = () => {
         position="0 0 -5"
         scale="1 1 1"
         rotation="0 0 0"
-        gltf-model="#castle-model">
+        gltf-model="https://jeanrua.com/models/SantaMaria_futuro.glb">
       </a-entity>
       
       <!-- Entidad para mostrar la posición del usuario -->
@@ -142,12 +95,6 @@ const ARView: React.FC = () => {
         <div className="error-overlay">
           <p>{error}</p>
           <Link to="/" className="back-button">Volver al inicio</Link>
-        </div>
-      )}
-      
-      {loadingModel && (
-        <div className="loading-overlay">
-          <p>Cargando modelo 3D...</p>
         </div>
       )}
       
