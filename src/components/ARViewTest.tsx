@@ -330,7 +330,7 @@ const ARViewTest: React.FC = () => {
   // Función para cargar el modelo con manejo avanzado de errores y reintentos
   const loadModel = (url: string) => {
     logger.info(`Iniciando carga del modelo desde: ${url}`);
-    
+
     // Control de seguridad para evitar bucles infinitos
     setGlobalAttempts(prev => prev + 1);
     if (globalAttempts >= MODEL_LOAD_CONFIG.maxGlobalAttempts) {
@@ -338,31 +338,33 @@ const ARViewTest: React.FC = () => {
       setError(`Error crítico: demasiados intentos fallidos. Por favor, reinicia la aplicación.`);
       return;
     }
-    
+
     setModelLoading(true);
     setLoadingProgress(0);
-    
+    // Incrementar contador de intentos al inicio de la carga
+    setModelLoadAttempts(prev => prev + 1); 
+
     // Limpiar cualquier request previa
     if (xhrRef.current) {
       logger.info('Abortando solicitud previa');
       xhrRef.current.abort();
     }
-    
+
     // Crear nueva solicitud XHR
     const xhr = new XMLHttpRequest();
     xhrRef.current = xhr;
-    
+
     xhr.open('GET', url, true);
     xhr.responseType = 'arraybuffer';
-    
+
     // Variable para controlar la limitación de actualizaciones de progreso
     let lastProgressUpdate = 0;
-    
+
     xhr.onloadstart = () => {
       logger.info(`Iniciando descarga del modelo desde ${url}`);
-      setModelLoadAttempts(prev => prev + 1);
+      // Ya no incrementamos los intentos aquí
     };
-    
+
     xhr.onprogress = (event) => {
       const now = Date.now();
       
@@ -510,7 +512,7 @@ const ARViewTest: React.FC = () => {
     };
     
     xhr.ontimeout = () => {
-      logger.error('Timeout al cargar el modelo', {
+      logger.error('Timeout al cargar el modelo', { 
         url,
         timeoutMs: MODEL_LOAD_CONFIG.timeoutMs
       });
@@ -521,13 +523,13 @@ const ARViewTest: React.FC = () => {
     xhr.onabort = () => {
       logger.warn('Carga del modelo abortada', { url });
     };
-    
+
     // Establecer timeout para la carga
     xhr.timeout = MODEL_LOAD_CONFIG.timeoutMs;
-    
+
     try {
       xhr.send();
-      logger.info('Solicitud enviada para cargar el modelo', { 
+      logger.info('Solicitud enviada para cargar el modelo', {
         url,
         method: 'GET',
         responseType: xhr.responseType
@@ -538,7 +540,7 @@ const ARViewTest: React.FC = () => {
         browserInfo: navigator.userAgent
       });
       setLoadingErrors(prev => [...prev, `Error al iniciar la descarga: ${e instanceof Error ? e.message : String(e)}`]);
-      retry();
+      retry(); // Llama a retry si send() falla
     }
   };
 
@@ -550,36 +552,33 @@ const ARViewTest: React.FC = () => {
       setError(`Error crítico: demasiados intentos fallidos. Por favor, reinicia la aplicación.`);
       return;
     }
-    
+
     if (isLastAttempt) {
       logger.error('Último intento fallido, no hay más reintentos disponibles');
       setError('No se pudo cargar ningún modelo 3D después de múltiples intentos. Por favor, reinicia la aplicación.');
       return;
     }
-    
-    if (modelLoadAttempts >= MODEL_LOAD_CONFIG.maxAttempts) {
+
+    // Usar el valor actual del contador de intentos que ya se incrementó
+    if (modelLoadAttempts >= MODEL_LOAD_CONFIG.maxAttempts) { 
       logger.error('Se alcanzó el máximo de intentos de carga del modelo', {
         intentos: modelLoadAttempts,
         errores: loadingErrors
       });
-      
-      // Mostrar mensaje de error detallado
-      setError(`No se pudo cargar el modelo 3D después de ${modelLoadAttempts} intentos. 
-               ${loadingErrors.length > 0 ? `Errores: ${loadingErrors.slice(-3).join(', ')}` : ''}`);
-      
+
       // Si todo falla, tratar de mostrar por lo menos el modelo más simple
       if (!currentModelUrl.includes('simplified') && currentModelUrl !== MODEL_URLS.fallback) {
         logger.info('Intentando última opción: modelo ultra simplificado');
-        
+
         // Marcar como último intento para prevenir bucles
         setIsLastAttempt(true);
-        
+
         // Restablecer estado para este último intento
         setError(null);
         setLoadingErrors([]);
-        setModelLoadAttempts(0);
+        // NO reiniciar modelLoadAttempts aquí
         setCurrentModelUrl(MODEL_URLS.simplified);
-        
+
         setTimeout(() => {
           try {
             loadModel(MODEL_URLS.simplified);
@@ -588,20 +587,24 @@ const ARViewTest: React.FC = () => {
             setError('No se pudo cargar ningún modelo 3D. Por favor, inténtalo más tarde.');
           }
         }, MODEL_LOAD_CONFIG.retryDelayMs);
+      } else {
+          // Ya se intentó el simplificado o fallback, así que detenemos todo.
+          setError(`No se pudo cargar el modelo 3D después de ${modelLoadAttempts} intentos. 
+                   ${loadingErrors.length > 0 ? `Errores: ${loadingErrors.slice(-3).join(', ')}` : ''}`);
       }
-      
-      return;
+
+      return; // Importante retornar aquí para no ejecutar el código de reintento normal
     }
-    
+
     logger.info('Reintentando carga con otra URL', {
-      intentoActual: modelLoadAttempts,
+      intentoActual: modelLoadAttempts, // Ya está incrementado
       maxIntentos: MODEL_LOAD_CONFIG.maxAttempts
     });
-    
+
     const nextUrl = selectModelUrl();
     logger.info(`Seleccionada siguiente URL: ${nextUrl}`);
     setCurrentModelUrl(nextUrl);
-    
+
     // Retraso antes de reintentar
     setTimeout(() => {
       loadModel(nextUrl);
