@@ -111,7 +111,7 @@ const ARViewTest: React.FC = () => {
       renderer="antialias: true; alpha: true; precision: mediump; logarithmicDepthBuffer: true;"
       id="scene"
       loading-screen="enabled: false">
-      <a-assets timeout="30000">
+      <a-assets timeout="3000000">
         <a-asset-item id="castillo-asset" src="https://jeanrua.com/models/SantaMaria_futuro.glb" 
           response-type="arraybuffer" crossorigin="anonymous"></a-asset-item>
       </a-assets>
