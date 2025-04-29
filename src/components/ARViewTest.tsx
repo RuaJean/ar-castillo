@@ -42,7 +42,7 @@ const MODEL_URLS = {
 // Configuración del proceso de carga de modelos
 const MODEL_LOAD_CONFIG = {
   maxAttempts: 4,
-  timeout: 30000,
+  timeout: 3000000,
   minValidSize: 100 * 1024, // 100KB mínimo para considerar un modelo válido
   retryDelay: 2000,
   progressThrottle: 500 // ms entre actualizaciones de progreso
@@ -51,7 +51,7 @@ const MODEL_LOAD_CONFIG = {
 // Configuración específica para iOS
 const IOS_CONFIG = {
   maxAttempts: 3,
-  timeout: 25000,
+  timeout: 2500000,
   minValidSize: 80 * 1024,
   retryDelay: 1500,
   progressThrottle: 800
@@ -591,7 +591,7 @@ const ARViewTest = () => {
     // Configuración específica para iOS vs otros dispositivos
     const config = {
       maxAttempts: isMobileDevice ? 4 : 3, // Más intentos para móviles
-      timeout: deviceInfo.isIOS ? 25000 : 40000, // Más tiempo para carga completa
+      timeout: deviceInfo.isIOS ? 2500000 : 4000000, // Más tiempo para carga completa
       minValidSize: 1 * 1024, // Reducir a solo 1KB para pruebas iniciales
       retryDelay: deviceInfo.isIOS ? 1000 : 2000,
       progressThrottle: deviceInfo.isIOS ? 500 : 200
