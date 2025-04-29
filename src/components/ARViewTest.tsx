@@ -166,6 +166,7 @@ const MODEL_LOAD_CONFIG = {
   retryDelayMs: 1000,             // Retraso entre intentos de carga
   progressThrottleMs: isMobile ? 500 : 200, // Menos actualizaciones en móviles
   maxTextureSize: isMobile ? 1024 : 2048,  // Limitar tamaño de texturas en móviles
+  maxGlobalAttempts: 5,           // Máximo absoluto de intentos incluyendo reset
 };
 
 const ARViewTest: React.FC = () => {
@@ -175,6 +176,8 @@ const ARViewTest: React.FC = () => {
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [cameraActive, setCameraActive] = useState(false);
   const [modelLoadAttempts, setModelLoadAttempts] = useState(0);
+  const [globalAttempts, setGlobalAttempts] = useState(0); // Contador global para evitar bucles infinitos
+  const [isLastAttempt, setIsLastAttempt] = useState(false); // Flag para marcar el último intento
   const [currentModelUrl, setCurrentModelUrl] = useState('');
   const [loadingErrors, setLoadingErrors] = useState<string[]>([]);
   const sceneContainerRef = useRef<HTMLDivElement>(null);
@@ -327,6 +330,14 @@ const ARViewTest: React.FC = () => {
   // Función para cargar el modelo con manejo avanzado de errores y reintentos
   const loadModel = (url: string) => {
     logger.info(`Iniciando carga del modelo desde: ${url}`);
+    
+    // Control de seguridad para evitar bucles infinitos
+    setGlobalAttempts(prev => prev + 1);
+    if (globalAttempts >= MODEL_LOAD_CONFIG.maxGlobalAttempts) {
+      logger.error(`Excedido número máximo global de intentos (${MODEL_LOAD_CONFIG.maxGlobalAttempts}), deteniendo carga`);
+      setError(`Error crítico: demasiados intentos fallidos. Por favor, reinicia la aplicación.`);
+      return;
+    }
     
     setModelLoading(true);
     setLoadingProgress(0);
@@ -533,6 +544,19 @@ const ARViewTest: React.FC = () => {
 
   // Función para reintentar con otra URL
   const retry = () => {
+    // Verificación de seguridad para prevenir bucles infinitos
+    if (globalAttempts >= MODEL_LOAD_CONFIG.maxGlobalAttempts) {
+      logger.error(`Excedido número máximo global de intentos (${MODEL_LOAD_CONFIG.maxGlobalAttempts}), cancelando reintento`);
+      setError(`Error crítico: demasiados intentos fallidos. Por favor, reinicia la aplicación.`);
+      return;
+    }
+    
+    if (isLastAttempt) {
+      logger.error('Último intento fallido, no hay más reintentos disponibles');
+      setError('No se pudo cargar ningún modelo 3D después de múltiples intentos. Por favor, reinicia la aplicación.');
+      return;
+    }
+    
     if (modelLoadAttempts >= MODEL_LOAD_CONFIG.maxAttempts) {
       logger.error('Se alcanzó el máximo de intentos de carga del modelo', {
         intentos: modelLoadAttempts,
@@ -546,6 +570,9 @@ const ARViewTest: React.FC = () => {
       // Si todo falla, tratar de mostrar por lo menos el modelo más simple
       if (!currentModelUrl.includes('simplified') && currentModelUrl !== MODEL_URLS.fallback) {
         logger.info('Intentando última opción: modelo ultra simplificado');
+        
+        // Marcar como último intento para prevenir bucles
+        setIsLastAttempt(true);
         
         // Restablecer estado para este último intento
         setError(null);
@@ -816,6 +843,7 @@ const ARViewTest: React.FC = () => {
           <p>Camera: {String(cameraActive)}</p>
           <p>Progress: {loadingProgress}%</p>
           <p>Attempt: {modelLoadAttempts}</p>
+          <p>Global: {globalAttempts}</p>
           <p>URL: {currentModelUrl.substring(0, 15)}...</p>
           {loadingErrors.length > 0 && (
             <>
@@ -850,10 +878,10 @@ const ARViewTest: React.FC = () => {
           </div>
           <p>Cargando modelo 3D: {loadingProgress}%</p>
           {modelLoadAttempts > 1 && (
-            <p className="retry-message">Intento {modelLoadAttempts}/4: {
+            <p className="retry-message">Intento {modelLoadAttempts}/{MODEL_LOAD_CONFIG.maxAttempts}: {
               currentModelUrl.includes('local') ? 'Usando copia local' : 
               currentModelUrl.includes('github') ? 'Usando copia de GitHub' :
-              currentModelUrl.includes('fallback') ? 'Usando modelo simplificado' : 
+              currentModelUrl.includes('fallback') || currentModelUrl.includes('simplified') ? 'Usando modelo simplificado' : 
               'Reintentando...'
             }</p>
           )}
