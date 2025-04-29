@@ -8,9 +8,12 @@ import '../styles/ARView.css';
 
 // Sistema de logging para depuración
 const DEBUG = true;
+const MOBILE_DEBUG = false; // Solo activar logging extenso en móviles si es necesario
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
 const logger = {
   info: (message: string, ...args: any[]) => {
-    if (DEBUG) console.info(`[AR-DEBUG][INFO] ${message}`, ...args);
+    if (DEBUG && (!isMobile || MOBILE_DEBUG)) console.info(`[AR-DEBUG][INFO] ${message}`, ...args);
   },
   warn: (message: string, ...args: any[]) => {
     if (DEBUG) console.warn(`[AR-DEBUG][WARN] ${message}`, ...args);
@@ -19,7 +22,7 @@ const logger = {
     if (DEBUG) console.error(`[AR-DEBUG][ERROR] ${message}`, ...args);
   },
   log: (message: string, ...args: any[]) => {
-    if (DEBUG) console.log(`[AR-DEBUG][LOG] ${message}`, ...args);
+    if (DEBUG && (!isMobile || MOBILE_DEBUG)) console.log(`[AR-DEBUG][LOG] ${message}`, ...args);
   }
 };
 
@@ -151,16 +154,18 @@ const MODEL_URLS = {
   local: '/SantaMaria_futuro.glb',
   backup: 'https://raw.githubusercontent.com/jeanrua/ar-castillo/main/public/SantaMaria_futuro.glb',
   fallback: '/castle.glb', // Modelo más simple por si todo falla
-  simplified: '/castle_low.glb' // Versión aún más ligera (si existe)
+  simplified: '/castle_low.glb', // Versión aún más ligera (si existe)
+  mobile: '/castle_mobile.glb' // Versión específica para móviles (si existe)
 };
 
 // Configuración avanzada para la carga del modelo
 const MODEL_LOAD_CONFIG = {
-  maxAttempts: 4,             // Número máximo de intentos de carga
-  timeoutMs: 120000,          // Timeout para la carga (2 minutos)
-  minValidSizeBytes: 10000,   // Tamaño mínimo esperado para un modelo GLB válido
-  retryDelayMs: 1000,         // Retraso entre intentos de carga
-  progressThrottleMs: 200,    // Limitar actualizaciones de progreso para mejor rendimiento
+  maxAttempts: 3,                 // Reducido para móviles (era 4)
+  timeoutMs: isMobile ? 60000 : 120000, // Timeout reducido para móviles
+  minValidSizeBytes: 10000,       // Tamaño mínimo esperado para un modelo GLB válido
+  retryDelayMs: 1000,             // Retraso entre intentos de carga
+  progressThrottleMs: isMobile ? 500 : 200, // Menos actualizaciones en móviles
+  maxTextureSize: isMobile ? 1024 : 2048,  // Limitar tamaño de texturas en móviles
 };
 
 const ARViewTest: React.FC = () => {
@@ -182,6 +187,12 @@ const ARViewTest: React.FC = () => {
 
   // Seleccionar la URL del modelo más adecuada para la situación actual
   const selectModelUrl = () => {
+    // Para móviles, intentar primero una versión específica para móviles si existe
+    if (isMobile && modelLoadAttempts === 0) {
+      logger.info('Primer intento en móvil: usando versión para móviles');
+      return MODEL_URLS.mobile || MODEL_URLS.fallback;
+    }
+    
     if (modelLoadAttempts === 0) {
       // Primera carga: usar remoto si estamos en HTTPS, local si estamos en HTTP
       if (window.location.protocol === 'https:') {
@@ -192,19 +203,16 @@ const ARViewTest: React.FC = () => {
         return MODEL_URLS.local;
       }
     } else if (modelLoadAttempts === 1) {
+      // Para móviles, ir directamente al fallback en el segundo intento
+      if (isMobile) {
+        logger.info('Segundo intento en móvil: usando modelo simplificado');
+        return MODEL_URLS.fallback;
+      }
+      
       // Segundo intento: usar local si el primer intento fue remoto, o backup si ya intentamos local
       const newUrl = currentModelUrl === MODEL_URLS.remote ? MODEL_URLS.local : MODEL_URLS.backup;
       logger.info(`Segundo intento: usando ${newUrl === MODEL_URLS.local ? 'URL local' : 'URL de backup GitHub'}`);
       return newUrl;
-    } else if (modelLoadAttempts === 2) {
-      // Tercer intento: usar GitHub si no se ha intentado aún
-      if (!currentModelUrl.includes('github')) {
-        logger.info('Tercer intento: usando URL de backup GitHub');
-        return MODEL_URLS.backup;
-      } else {
-        logger.info('Tercer intento: usando URL de fallback simple');
-        return MODEL_URLS.fallback;
-      }
     } else {
       // Último recurso: modelo simplificado fallback
       logger.info('Último intento: usando modelo simplificado');
@@ -214,33 +222,33 @@ const ARViewTest: React.FC = () => {
 
   // Se ejecuta una sola vez al inicio para configurar la depuración y solicitar permisos
   useEffect(() => {
-    logger.info('Iniciando ARViewTest - Versión con debugging extenso');
+    logger.info('Iniciando ARViewTest - Versión optimizada para móviles');
+    logger.info(`Dispositivo móvil detectado: ${isMobile}`);
     logger.info(`Protocolo actual: ${window.location.protocol}`);
-    logger.info(`URLs de modelos disponibles:`, MODEL_URLS);
     logger.info(`User Agent: ${navigator.userAgent}`);
-    logger.info(`Tamaño de ventana: ${window.innerWidth}x${window.innerHeight}`);
     
-    // Registrar información detallada del entorno
-    logEnvironmentInfo();
+    // Registrar información detallada del entorno solo en debug completo
+    if (!isMobile || MOBILE_DEBUG) {
+      logEnvironmentInfo();
+    }
     
     // Seleccionar URL inicial
     const initialUrl = selectModelUrl();
     setCurrentModelUrl(initialUrl);
     logger.info(`URL inicial seleccionada: ${initialUrl}`);
     
-    // Configurar depuración de A-Frame de forma segura
-    if (DEBUG) {
+    // Configurar depuración de A-Frame de forma segura (no en móviles)
+    if (DEBUG && !isMobile) {
       enableAFrameDebug();
     }
 
-    // Registrar los errores en consola
+    // Registrar los errores en consola (esto siempre es importante)
     window.addEventListener('error', (event) => {
       logger.error('Error global capturado:', event.message, {
         error: event.error,
         filename: event.filename,
         lineno: event.lineno,
         colno: event.colno,
-        timestamp: new Date().toISOString(),
       });
     });
     
@@ -248,7 +256,6 @@ const ARViewTest: React.FC = () => {
     window.addEventListener('unhandledrejection', (event) => {
       logger.error('Promesa rechazada sin manejar:', {
         reason: event.reason,
-        timestamp: new Date().toISOString(),
       });
     });
     
@@ -319,11 +326,7 @@ const ARViewTest: React.FC = () => {
 
   // Función para cargar el modelo con manejo avanzado de errores y reintentos
   const loadModel = (url: string) => {
-    logger.info(`Iniciando carga del modelo desde: ${url}`, { 
-      intento: modelLoadAttempts + 1,
-      timestamp: new Date().toISOString(),
-      navegador: navigator.userAgent.split(' ').slice(-1)[0]
-    });
+    logger.info(`Iniciando carga del modelo desde: ${url}`);
     
     setModelLoading(true);
     setLoadingProgress(0);
@@ -345,10 +348,7 @@ const ARViewTest: React.FC = () => {
     let lastProgressUpdate = 0;
     
     xhr.onloadstart = () => {
-      logger.info(`Iniciando descarga del modelo desde ${url}`, {
-        hora: new Date().toTimeString().split(' ')[0],
-        hostname: new URL(url.startsWith('/') ? window.location.origin + url : url).hostname
-      });
+      logger.info(`Iniciando descarga del modelo desde ${url}`);
       setModelLoadAttempts(prev => prev + 1);
     };
     
@@ -365,12 +365,11 @@ const ARViewTest: React.FC = () => {
       if (event.lengthComputable) {
         const percentComplete = Math.round((event.loaded / event.total) * 100);
         
-        // Solo registrar en la consola cada 10% o en 0%, 100%
-        if (percentComplete % 10 === 0 || percentComplete === 100) {
+        // Solo registrar en la consola cada 25% o en 0%, 100% en móviles
+        if (percentComplete % (isMobile ? 25 : 10) === 0 || percentComplete === 100) {
           logger.info(`Progreso de carga: ${percentComplete}%`, {
             loaded: formatBytes(event.loaded),
-            total: formatBytes(event.total),
-            url: url.split('/').pop()
+            total: formatBytes(event.total)
           });
         }
         
@@ -386,10 +385,6 @@ const ARViewTest: React.FC = () => {
       } else {
         // Para URLs sin tamaño computable, simular progreso basado en bytes recibidos
         const estimatedProgress = Math.min(99, Math.log(event.loaded + 1) / Math.log(10000000) * 100);
-        logger.info(`Progreso estimado (no computable): ${Math.round(estimatedProgress)}%`, {
-          loaded: formatBytes(event.loaded),
-          url: url.split('/').pop()
-        });
         setLoadingProgress(Math.round(estimatedProgress));
       }
     };
@@ -711,15 +706,14 @@ const ARViewTest: React.FC = () => {
     }
   }, [loadingProgress, arReady]);
 
-  // Monitorear estado del sistema cada 5 segundos
+  // Monitorear estado del sistema cada 10 segundos (aumentado de 5s) y solo si no es móvil
   useEffect(() => {
-    if (!arReady) return;
+    if (!arReady || isMobile) return; // No monitorear en dispositivos móviles
     
     const intervalId = setInterval(() => {
       const memory = (window as any).performance?.memory;
       
       logger.info('Estado del sistema', {
-        timestamp: new Date().toISOString(),
         memory: memory ? {
           jsHeapSizeLimit: formatBytes(memory.jsHeapSizeLimit),
           totalJSHeapSize: formatBytes(memory.totalJSHeapSize),
@@ -728,29 +722,12 @@ const ARViewTest: React.FC = () => {
         arReady,
         modelLoading,
         loadingProgress,
-        cameraActive,
-        modelLoadAttempts
       });
       
-      // Verificar si hay elementos clave en la escena
-      const sceneEl = document.querySelector('a-scene');
-      const cameraEl = document.querySelector('a-camera');
-      const modelEl = document.querySelector('#castillo-model');
-      
-      logger.info('Estado de elementos DOM', {
-        'a-scene': !!sceneEl,
-        'a-camera': !!cameraEl,
-        'castillo-model': !!modelEl,
-        'scene class': sceneEl?.classList.toString(),
-        'camera position': cameraEl?.getAttribute('position'),
-        'model position': modelEl?.getAttribute('position'),
-        'model visible': modelEl?.getAttribute('visible')
-      });
-      
-    }, 5000);
+    }, 10000); // Aumentado a 10 segundos
     
     return () => clearInterval(intervalId);
-  }, [arReady, modelLoading, loadingProgress, cameraActive, modelLoadAttempts]);
+  }, [arReady, modelLoading, loadingProgress]);
 
   // Utilidad para formatear bytes en forma legible
   const formatBytes = (bytes: number, decimals = 2) => {
@@ -764,10 +741,10 @@ const ARViewTest: React.FC = () => {
 
   // Contenido A-Frame como HTML con optimizaciones de rendimiento y depuración
   const getAframeHTML = () => {
-    logger.info(`Generando HTML A-Frame con URL: ${currentModelUrl}`, { intento: modelLoadAttempts });
+    logger.info(`Generando HTML A-Frame con URL: ${currentModelUrl}`);
     
-    // Configurar parámetros de depuración para A-Frame
-    const debugConfig = DEBUG ? 
+    // Configurar parámetros de depuración para A-Frame (desactivado en móviles)
+    const debugConfig = DEBUG && !isMobile ? 
       `stats="${DEBUG}" 
        debug="true"
        debug-helper` 
@@ -776,21 +753,18 @@ const ARViewTest: React.FC = () => {
     return `
       <a-scene 
         embedded
-        arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: ${DEBUG}; detectionMode: mono_and_matrix;"
+        arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: ${DEBUG && !isMobile}; detectionMode: mono_and_matrix;"
         vr-mode-ui="enabled: false"
-        renderer="antialias: true; alpha: true; precision: mediump; logarithmicDepthBuffer: true;"
+        renderer="antialias: ${!isMobile}; alpha: true; precision: ${isMobile ? 'lowp' : 'mediump'}; logarithmicDepthBuffer: ${!isMobile};"
         id="scene"
         loading-screen="enabled: false"
         ${debugConfig}>
         
-        <!-- Inspector y Stats se cargarán si debug está activado -->
-        
-        <a-assets timeout="3000000">
+        <a-assets timeout="${isMobile ? 30000 : 3000000}">
           <a-asset-item id="castillo-asset" src="${currentModelUrl}" 
             response-type="arraybuffer" crossorigin="anonymous"></a-asset-item>
         </a-assets>
         
-        <!-- Agregamos más información de depuración cuando ocurre una excepción -->
         <a-entity position="0 0 -4" id="error-display" visible="false">
           <a-text value="Error al cargar modelo" color="red" position="0 0.5 0" align="center"></a-text>
           <a-text id="error-details" value="" color="white" position="0 0.2 0" align="center" scale="0.5 0.5 0.5"></a-text>
@@ -806,17 +780,11 @@ const ARViewTest: React.FC = () => {
         <a-entity
           id="castillo-model"
           position="0 0 -5"
-          scale="0.5 0.5 0.5"
+          scale="${isMobile ? '0.3 0.3 0.3' : '0.5 0.5 0.5'}"
           rotation="0 0 0"
           gltf-model="#castillo-asset"
           visible="false"
           animation="property: visible; to: true; dur: 1; delay: 500; startEvents: loaded">
-        </a-entity>
-        
-        <!-- Indicador de dirección hacia el modelo -->
-        <a-entity id="direction-indicator" position="0 0 -2">
-          <a-box position="0 0.5 0" color="green" depth="0.1" height="0.1" width="0.5"></a-box>
-          <a-text value="Modelo 3D" position="0 0.7 0" color="white" align="center"></a-text>
         </a-entity>
         
         <a-entity id="progress-indicator" position="0 0 -3" visible="true">
@@ -826,8 +794,8 @@ const ARViewTest: React.FC = () => {
           <a-text id="progress-text" value="${loadingProgress}%" position="0 -0.2 0" color="white" align="center" scale="0.3 0.3 0.3"></a-text>
         </a-entity>
         
-        <!-- Coordenadas para depuración -->
-        ${DEBUG ? `
+        <!-- Coordenadas para depuración (solo en no-móviles) -->
+        ${DEBUG && !isMobile ? `
         <a-entity id="debug-info" position="0 -1 -3">
           <a-text value="Debug Info" position="0 0 0" color="white" align="center" scale="0.3 0.3 0.3"></a-text>
           <a-text id="coords-display" value="Cargando coordenadas..." position="0 -0.2 0" color="white" align="center" scale="0.2 0.2 0.2"></a-text>
