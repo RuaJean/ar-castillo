@@ -818,7 +818,7 @@ const ARViewTest = () => {
             setModelLoading(false);
             setCurrentStep('modelo cargado');
           }
-        }, 500);
+        }, 500000);
         
         // Timeout para el verificador
         setTimeout(() => {
@@ -832,7 +832,7 @@ const ARViewTest = () => {
           } else {
             throw new Error('Timeout al verificar carga del modelo en la escena');
           }
-        }, 5000);
+        }, 500000);
         
         return;
       } catch (error: any) {
