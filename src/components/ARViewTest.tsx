@@ -30,13 +30,7 @@ const enableAFrameDebug = () => {
 };
 
 // URLs del modelo para distintos escenarios - reducir resolución para modelos grandes
-const MODEL_URLS = {
-  remote: 'https://jeanrua.com/models/SantaMaria_futuro_optimized.glb', // Versión optimizada
-  local: './models/SantaMaria_futuro.glb',     // URL local (para desarrollo)
-  simplified: 'https://jeanrua.com/models/SantaMaria_low.glb', // Versión ligera para móviles
-  fallback: './models/castle.glb',  // Modelo simple local como respaldo
-  placeholder: './models/placeholder.glb' // Modelo mínimo mientras carga
-};
+const MODEL_URL = 'http://jeanrua.com/models/SantaMaria_futuro.glb';
 
 // Registrar información del entorno
 const logEnvironmentInfo = () => {
@@ -114,7 +108,7 @@ const checkLocalResources = async (): Promise<boolean> => {
     logger.info('Verificando modelos locales...');
     
     // Verificar acceso a modelo local principal
-    const response = await fetch(MODEL_URLS.local, { method: 'HEAD' });
+    const response = await fetch(MODEL_URL, { method: 'HEAD' });
     const localModelAvailable = response.ok;
     
     if (localModelAvailable) {
@@ -225,42 +219,15 @@ const ARViewTest = () => {
   
   // Seleccionar la URL del modelo más adecuada para la situación actual
   const selectModelUrl = () => {
-    if (modelLoadAttempts === 0) {
-      // Primera carga: usar remoto si estamos en HTTPS, local si estamos en HTTP
-      if (window.location.protocol === 'https:') {
-        logger.info('Primer intento: usando URL remota');
-        return MODEL_URLS.remote;
-      } else {
-        logger.info('Primer intento: usando URL local');
-        return MODEL_URLS.local;
-      }
-    } else if (modelLoadAttempts === 1) {
-      // Segundo intento: usar local si el primer intento fue remoto, o backup si ya intentamos local
-      const newUrl = currentModelUrl === MODEL_URLS.remote ? MODEL_URLS.local : MODEL_URLS.fallback;
-      logger.info(`Segundo intento: usando ${newUrl === MODEL_URLS.local ? 'URL local' : 'URL de backup GitHub'}`);
-      return newUrl;
-    } else if (modelLoadAttempts === 2) {
-      // Tercer intento: usar GitHub si no se ha intentado aún
-      if (!currentModelUrl.includes('github')) {
-        logger.info('Tercer intento: usando URL de backup GitHub');
-        return MODEL_URLS.fallback;
-      } else {
-        // Si ya probamos GitHub, usar el modelo simplificado
-        logger.info('Tercer intento: usando modelo simplificado');
-        return MODEL_URLS.simplified;
-      }
-    } else {
-      // Cuarto intento: último recurso, modelo simplificado local
-      logger.info('Último intento: usando modelo simplificado local');
-      return MODEL_URLS.fallback;
-    }
+    logger.info('Usando URL única del modelo');
+    return MODEL_URL;
   };
 
   // Se ejecuta una sola vez al inicio para configurar la depuración y solicitar permisos
   useEffect(() => {
     logger.info('Iniciando ARViewTest - Versión con debugging extenso');
     logger.info(`Protocolo actual: ${window.location.protocol}`);
-    logger.info(`URLs de modelos disponibles:`, MODEL_URLS);
+    logger.info(`URLs de modelos disponibles:`, MODEL_URL);
     logger.info(`User Agent: ${navigator.userAgent}`);
     logger.info(`Tamaño de ventana: ${window.innerWidth}x${window.innerHeight}`);
     
@@ -357,9 +324,7 @@ const ARViewTest = () => {
 
     // Precargar modelos para evitar problemas CORS
     const preloadUrls = [
-      MODEL_URLS.remote,
-      MODEL_URLS.fallback,
-      MODEL_URLS.simplified
+      MODEL_URL
     ];
     
     // Usar Promise.all para precargar en paralelo
@@ -511,7 +476,6 @@ const ARViewTest = () => {
     
   }, [permissionAsked, requestCameraPermission]);
 
-  // Mover loadModel aquí, antes del useEffect que la usa
   // Función para cargar un modelo con manejo de progreso y recuperación
   const loadModel = useCallback((modelUrl: string) => {
     if (!modelUrl) {
@@ -535,34 +499,21 @@ const ARViewTest = () => {
     logger.info(`Iniciando carga del modelo: ${modelUrl}`, {
       isIOS: isIOSDevice,
       isSafari: isSafariDevice,
-      userAgent: userAgent.substring(0, 100), // Truncar para evitar logs demasiado largos
-      attemptNumber: modelLoadAttempts + 1
+      userAgent: userAgent.substring(0, 100) // Truncar para evitar logs demasiado largos
     });
 
     // Establecer estado de carga
     setLoading(true);
     setLoadingProgress(0);
     const startTime = Date.now();
-    setModelLoadAttempts(prev => prev + 1);
 
     // Crear referencia al modelo para limpieza posterior
     let modelElement: Element | null = null;
     let timeout: number | null = null;
 
-    // URLs alternativas según la prioridad (primaria, local, simplificada, fallback)
-    const modelUrls = {
-      primary: modelUrl,
-      local: MODEL_URLS.local,
-      simplified: MODEL_URLS.simplified,
-      fallback: MODEL_URLS.fallback
-    };
-
     // Configuraciones específicas para iOS
     const config = {
-      maxAttempts: isIOSDevice ? 2 : 3,
       timeout: isIOSDevice ? 20000 : 30000, // 20 segundos para iOS, 30 para otros
-      minValidSize: isIOSDevice ? 5 * 1024 : 10 * 1024, // 5KB mínimo para iOS
-      retryDelay: isIOSDevice ? 500 : 1000,
       progressThrottle: isIOSDevice ? 500 : 200 // Limitar las actualizaciones de progreso
     };
 
@@ -584,7 +535,7 @@ const ARViewTest = () => {
     }
 
     // Función para cargar con fetch (mejor compatibilidad con iOS que XMLHttpRequest)
-    const loadWithFetch = async (url: string, attempt: number): Promise<ArrayBuffer> => {
+    const loadWithFetch = async (): Promise<ArrayBuffer> => {
       const controller = new AbortController();
       const signal = controller.signal;
       
@@ -592,9 +543,9 @@ const ARViewTest = () => {
       const timeoutId = setTimeout(() => controller.abort(), config.timeout);
       
       try {
-        logger.info(`Intento ${attempt + 1} - Cargando modelo con fetch: ${url}`);
+        logger.info(`Cargando modelo con fetch: ${modelUrl}`);
         
-        const response = await fetch(url, { 
+        const response = await fetch(modelUrl, { 
           signal,
           cache: 'no-store', // Evitar caché para asegurar versión actual
           headers: {
@@ -636,8 +587,7 @@ const ARViewTest = () => {
               
               logger.info(`Progreso de carga: ${percentComplete}%`, {
                 loaded: formatBytes(receivedLength),
-                total: formatBytes(Number(totalSize)),
-                url
+                total: formatBytes(Number(totalSize))
               });
             }
           }
@@ -660,7 +610,6 @@ const ARViewTest = () => {
         clearTimeout(timeoutId);
         
         logger.info(`Modelo descargado correctamente: ${formatBytes(receivedLength)}`, {
-          url,
           loadTime: `${Date.now() - startTime}ms`
         });
         
@@ -669,34 +618,17 @@ const ARViewTest = () => {
         clearTimeout(timeoutId);
         
         if (error.name === 'AbortError') {
-          logger.error(`Timeout al cargar el modelo (${config.timeout}ms)`, { url });
+          logger.error(`Timeout al cargar el modelo (${config.timeout}ms)`);
           throw new Error(`Timeout: ${config.timeout}ms`);
         } else {
-          logger.error(`Error al cargar el modelo: ${error.message}`, { url });
+          logger.error(`Error al cargar el modelo: ${error.message}`);
           throw error;
         }
       }
     };
 
     // Función para procesar el modelo una vez descargado
-    const processModel = async (buffer: ArrayBuffer, url: string) => {
-      // Validar tamaño mínimo
-      if (buffer.byteLength < config.minValidSize) {
-        logger.warn(`El modelo parece demasiado pequeño: ${formatBytes(buffer.byteLength)}`);
-        // Continuar de todos modos, puede ser un modelo muy simple
-      }
-
-      // Validar formato (verificar firma GLB)
-      const arr = new Uint8Array(buffer.slice(0, 4));
-      const glbSignature = Array.from(arr).map(byte => String.fromCharCode(byte)).join('');
-      if (glbSignature !== 'glTF') {
-        logger.warn('El modelo no tiene firma GLB válida', {
-          signature: glbSignature,
-          expected: 'glTF'
-        });
-        // Continuar de todos modos, podría ser otro formato de modelo
-      }
-
+    const processModel = async (buffer: ArrayBuffer) => {
       try {
         // Crear objeto URL del modelo descargado
         const blob = new Blob([buffer], { type: 'model/gltf-binary' });
@@ -728,8 +660,6 @@ const ARViewTest = () => {
         if (isIOSDevice) {
           // Escala más pequeña para mejor rendimiento en iOS
           modelElement.setAttribute('scale', '0.85 0.85 0.85');
-          // Reducir polígonos en iOS activando LOD (Level of Detail) de A-Frame
-          modelElement.setAttribute('lod', 'minCellWidth: 0.005; maxCellWidth: 0.1; targetCellWidth: 0.03');
           // Reducir detalles de materiales
           modelElement.setAttribute('material', 'npot: true; dithering: false');
         } else {
@@ -752,7 +682,6 @@ const ARViewTest = () => {
           setModelLoaded(true);
           
           logger.info('Modelo cargado y renderizado correctamente', {
-            url,
             loadTime: `${Date.now() - startTime}ms`
           });
 
@@ -803,91 +732,27 @@ const ARViewTest = () => {
           logger.error('Error al cargar el modelo en el escenario', e);
           setLoading(false);
           setError('Error en la renderización del modelo 3D');
-          
-          // Intentar cargar modelo alternativo si aún tenemos intentos disponibles
-          if (modelLoadAttempts < config.maxAttempts) {
-            logger.info('Intentando cargar modelo alternativo');
-            const nextUrl = MODEL_URLS.simplified;
-            setCurrentModelUrl(nextUrl);
-          }
         });
         
         // Agregar el modelo a la escena
         sceneEl.appendChild(modelElement);
         
-        logger.info('Modelo añadido a la escena', { url });
+        logger.info('Modelo añadido a la escena');
       } catch (e) {
         logger.error('Error al procesar el modelo descargado', e);
         setLoading(false);
         setError('Error al procesar el modelo 3D');
-        
-        // Intentar con un modelo alternativo
-        if (modelLoadAttempts < config.maxAttempts) {
-          const fallbackUrl = MODEL_URLS.fallback;
-          logger.info(`Intentando con modelo alternativo: ${fallbackUrl}`);
-          setCurrentModelUrl(fallbackUrl);
-        }
       }
     };
 
-    // Función para intentar cargar el modelo con recuperación
-    const attemptLoad = async () => {
-      let currentAttempt = 0;
-      let lastError: Error | null = null;
-      
-      while (currentAttempt < config.maxAttempts) {
-        try {
-          // Seleccionar URL según el intento actual
-          let urlToUse = modelUrl;
-          
-          if (currentAttempt > 0) {
-            // Para el segundo intento, usar local o simplificado según el dispositivo
-            urlToUse = isIOSDevice ? modelUrls.simplified : modelUrls.local;
-            // Para el tercer intento, ir al fallback
-            if (currentAttempt > 1) {
-              urlToUse = modelUrls.fallback;
-            }
-            
-            logger.info(`Reintentando carga con URL alternativa (#${currentAttempt + 1}): ${urlToUse}`);
-          }
-          
-          // Intentar cargar con fetch (mejor para iOS)
-          const buffer = await loadWithFetch(urlToUse, currentAttempt);
-          
-          // Procesar el modelo
-          await processModel(buffer, urlToUse);
-          
-          // Si llegamos aquí, la carga fue exitosa
-          return;
-        } catch (error: any) {
-          lastError = error;
-          logger.error(`Error en intento #${currentAttempt + 1}: ${error.message}`);
-          
-          // Registrar el error para depuración
-          setLoadingErrors(prev => [...prev, `Intento ${currentAttempt + 1}: ${error.message}`]);
-          
-          // Incrementar el contador de intentos
-          currentAttempt++;
-          
-          // Si aún tenemos intentos, esperar antes del siguiente
-          if (currentAttempt < config.maxAttempts) {
-            await new Promise(resolve => setTimeout(resolve, config.retryDelay));
-          }
-        }
-      }
-      
-      // Si llegamos aquí, todos los intentos fallaron
-      logger.error(`Todos los intentos fallaron (${config.maxAttempts})`, { lastError });
-      setLoading(false);
-      setError(`No se pudo cargar el modelo después de ${config.maxAttempts} intentos`);
-    };
-    
     // Iniciar el proceso de carga
-    attemptLoad().catch(error => {
-      logger.error('Error crítico durante la carga', error);
-      setLoading(false);
-      setError('Error crítico durante la carga del modelo');
-    });
+    loadWithFetch()
+      .then(buffer => processModel(buffer))
+      .catch(error => {
+        logger.error('Error durante la carga del modelo', error);
+        setLoading(false);
+        setError('Error al cargar el modelo 3D');
+      });
     
     // Limpiar recursos cuando se desmonte el componente
     return () => {
@@ -895,34 +760,17 @@ const ARViewTest = () => {
         window.clearTimeout(timeout);
       }
     };
-  }, [deviceInfo, modelLoadAttempts, currentPosition, setModelLoaded]);
+  }, [deviceInfo, currentPosition, setModelLoaded]);
 
-  // Manejador de carga del modelo - inicia el proceso y maneja cambios de URL
+  // Manejador de carga del modelo - inicia el proceso
   useEffect(() => {
     if (!arReady) {
       logger.info('AR no está listo todavía, esperando para cargar el modelo...');
       return;
     }
     
-    if (currentModelUrl && modelLoadAttempts === 0) {
-      // En dispositivos móviles, usar preferentemente modelos locales/simplificados
-      if (isMobileDevice && modelLoadAttempts === 0) {
-        logger.info('Dispositivo móvil detectado, optando por modelos optimizados');
-        // Si es la primera carga en móvil, preferir modelo local (más rápido)
-        if (window.location.protocol === 'https:') {
-          // En HTTPS podemos usar el modelo remoto, pero preferimos local por rendimiento
-          const mobileUrl = MODEL_URLS.local;
-          setCurrentModelUrl(mobileUrl);
-          loadModel(mobileUrl);
-        } else {
-          // En HTTP, usar local directamente
-          loadModel(MODEL_URLS.local);
-        }
-      } else {
-        // En desktop, seguir el comportamiento normal
-        loadModel(currentModelUrl);
-      }
-    }
+    // Cuando AR esté listo, cargar el modelo utilizando la única URL válida
+    loadModel(MODEL_URL);
     
     return () => {
       if (xhrRef.current) {
@@ -931,7 +779,7 @@ const ARViewTest = () => {
         xhrRef.current = null;
       }
     };
-  }, [arReady, currentModelUrl, isMobileDevice, modelLoadAttempts, loadModel]);
+  }, [arReady, loadModel]);
 
   // Función para reintentar si ocurre un error
   const retrySetup = async () => {
@@ -958,10 +806,6 @@ const ARViewTest = () => {
     setCurrentStep('inicializando realidad aumentada');
     
     try {
-      // Verificar modelos locales primero
-      const localModelsAvailable = await checkLocalResources();
-      logger.info(`Modelos locales disponibles: ${localModelsAvailable}`);
-      
       // Verificar permisos de cámara
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -979,16 +823,6 @@ const ARViewTest = () => {
         
         // Activar AR
         setArReady(true);
-        
-        // Cargar el modelo - elegir el adecuado según plataforma
-        const modelUrl = isMobileDevice ? 
-          (localModelsAvailable ? MODEL_URLS.local : MODEL_URLS.simplified) : 
-          (localModelsAvailable ? MODEL_URLS.local : MODEL_URLS.remote);
-        
-        // Pequeño retraso para asegurar que A-Frame esté listo
-        setTimeout(() => {
-          loadModel(modelUrl);
-        }, 1000);
         
       } catch (error: any) {
         setError(`Error al acceder a la cámara: ${error.message || 'Error desconocido'}`);
@@ -1011,11 +845,6 @@ const ARViewTest = () => {
         loading-screen="enabled: false"
         inspector="url: https://cdn.jsdelivr.net/gh/aframevr/aframe-inspector@master/dist/aframe-inspector.min.js"
       >
-        <!-- Precargar DRACO decoder para mejor compresión de modelos -->
-        <a-assets timeout="10000">
-          <a-asset-item id="placeholder-model" src="${MODEL_URLS.placeholder}"></a-asset-item>
-        </a-assets>
-        
         <a-camera 
           gps-projected-camera 
           rotation-reader 
@@ -1034,16 +863,6 @@ const ARViewTest = () => {
           draco-decoder="legacy: false"
           oculus-thumbstick-controls="acceleration: 20"
         ></a-entity>
-        
-        <!-- Modelo de respaldo básico -->
-        <a-box 
-          id="fallback-model" 
-          position="0 0 -5" 
-          width="1" height="1" depth="1" 
-          color="#4CC3D9"
-          visible="false"
-          animation="property: rotation; to: 0 360 0; dur: 10000; easing: linear; loop: true"
-        ></a-box>
         
         <!-- Luces para mejor visualización -->
         <a-light type="ambient" color="#CCC" intensity="0.7"></a-light>
@@ -1133,14 +952,6 @@ const ARViewTest = () => {
             <div className="progress-bar" style={{ width: `${loadingProgress}%` }}></div>
           </div>
           <p>Cargando modelo 3D: {loadingProgress}%</p>
-          {modelLoadAttempts > 1 && (
-            <p className="retry-message">Intento {modelLoadAttempts}/4: {
-              currentModelUrl.includes('local') ? 'Usando copia local' : 
-              currentModelUrl.includes('github') ? 'Usando copia de GitHub' :
-              currentModelUrl.includes('fallback') ? 'Usando modelo simplificado' : 
-              'Reintentando...'
-            }</p>
-          )}
         </div>
       )}
       
