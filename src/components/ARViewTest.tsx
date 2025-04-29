@@ -23,6 +23,128 @@ const logger = {
   }
 };
 
+// Función segura para habilitar el modo de depuración de A-Frame
+const enableAFrameDebug = () => {
+  try {
+    if (typeof window !== 'undefined' && window.AFRAME) {
+      logger.info('AFRAME encontrado en window', {
+        version: window.AFRAME.version,
+        hasDebug: !!window.AFRAME.debug,
+        hasUtils: !!window.AFRAME.utils,
+        components: Object.keys(window.AFRAME.components || {}).length,
+      });
+      
+      // Método 1: API debug.enable() (puede no estar disponible)
+      if (window.AFRAME.debug && typeof window.AFRAME.debug.enable === 'function') {
+        window.AFRAME.debug.enable();
+        logger.info('Modo debug de A-Frame activado usando debug.enable()');
+        return true;
+      }
+      
+      // Método 2: Configurar debug en registerComponent (alternativa)
+      if (window.AFRAME.registerComponent) {
+        logger.info('Intentando activar debug mediante atributos');
+        
+        // Crear componente de depuración personalizado
+        window.AFRAME.registerComponent('debug-helper', {
+          init: function() {
+            logger.info('Componente debug-helper inicializado');
+            // Activar estadísticas de rendimiento si THREE está disponible
+            if (window.AFRAME.THREE && window.AFRAME.THREE.Stats) {
+              const stats = new window.AFRAME.THREE.Stats();
+              document.body.appendChild(stats.dom);
+              logger.info('Stats de THREE.js añadidos al DOM');
+            }
+          }
+        });
+        
+        return true;
+      }
+      
+      logger.warn('No se pudo activar el modo debug de A-Frame');
+      return false;
+    } else {
+      logger.warn('A-Frame no está disponible en window');
+      return false;
+    }
+  } catch (error) {
+    logger.error('Error al intentar habilitar el debug de A-Frame', error);
+    return false;
+  }
+};
+
+// Función para registrar información sobre el entorno
+const logEnvironmentInfo = () => {
+  try {
+    logger.info('Información del entorno:', {
+      userAgent: navigator.userAgent,
+      vendor: navigator.vendor,
+      platform: navigator.platform,
+      language: navigator.language,
+      deviceMemory: (navigator as any).deviceMemory || 'No disponible',
+      hardwareConcurrency: navigator.hardwareConcurrency || 'No disponible',
+      url: window.location.href,
+      protocol: window.location.protocol,
+      screenSize: `${window.screen.width}x${window.screen.height}`,
+      devicePixelRatio: window.devicePixelRatio,
+    });
+    
+    // Comprobar WebGL
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+    
+    if (gl) {
+      try {
+        // Asegurar que TypeScript reconoce gl como WebGLRenderingContext
+        const webgl = gl as WebGLRenderingContext;
+        const debugInfo = webgl.getExtension('WEBGL_debug_renderer_info');
+        
+        if (debugInfo) {
+          logger.info('Información WebGL:', {
+            vendor: webgl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL),
+            renderer: webgl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL),
+            version: webgl.getParameter(webgl.VERSION),
+            shadingLanguageVersion: webgl.getParameter(webgl.SHADING_LANGUAGE_VERSION),
+            maxTextureSize: webgl.getParameter(webgl.MAX_TEXTURE_SIZE)
+          });
+        } else {
+          logger.info('Información WebGL básica:', {
+            version: webgl.getParameter(webgl.VERSION),
+            vendor: webgl.getParameter(webgl.VENDOR),
+          });
+        }
+      } catch (e) {
+        logger.warn('Error al obtener información WebGL', e);
+      }
+    } else {
+      logger.warn('WebGL no está soportado en este navegador');
+    }
+    
+    // Scripts cargados
+    const scripts = Array.from(document.scripts).map(s => ({
+      src: s.src,
+      type: s.type,
+      async: s.async,
+      defer: s.defer
+    }));
+    
+    logger.info(`Scripts cargados: ${scripts.length}`);
+    
+    // Bibliotecas detectadas
+    const libraries = {
+      aframe: typeof window.AFRAME !== 'undefined',
+      three: typeof (window as any).THREE !== 'undefined',
+      jquery: typeof (window as any).jQuery !== 'undefined',
+      react: typeof (window as any).React !== 'undefined',
+      arjs: typeof (window as any).ARjs !== 'undefined'
+    };
+    
+    logger.info('Bibliotecas detectadas:', libraries);
+  } catch (error) {
+    logger.error('Error al recopilar información del entorno', error);
+  }
+};
+
 // URLs de modelos alternativos
 const MODEL_URLS = {
   remote: 'https://jeanrua.com/models/SantaMaria_futuro.glb',
@@ -98,20 +220,36 @@ const ARViewTest: React.FC = () => {
     logger.info(`User Agent: ${navigator.userAgent}`);
     logger.info(`Tamaño de ventana: ${window.innerWidth}x${window.innerHeight}`);
     
+    // Registrar información detallada del entorno
+    logEnvironmentInfo();
+    
     // Seleccionar URL inicial
     const initialUrl = selectModelUrl();
     setCurrentModelUrl(initialUrl);
     logger.info(`URL inicial seleccionada: ${initialUrl}`);
     
-    // Configurar depuración de A-Frame
-    if (DEBUG && window.AFRAME) {
-      window.AFRAME.debug.enable();
-      logger.info('Modo debug de A-Frame activado');
+    // Configurar depuración de A-Frame de forma segura
+    if (DEBUG) {
+      enableAFrameDebug();
     }
 
     // Registrar los errores en consola
     window.addEventListener('error', (event) => {
-      logger.error('Error global capturado:', event.message, event.error);
+      logger.error('Error global capturado:', event.message, {
+        error: event.error,
+        filename: event.filename,
+        lineno: event.lineno,
+        colno: event.colno,
+        timestamp: new Date().toISOString(),
+      });
+    });
+    
+    // También capturar promesas rechazadas
+    window.addEventListener('unhandledrejection', (event) => {
+      logger.error('Promesa rechazada sin manejar:', {
+        reason: event.reason,
+        timestamp: new Date().toISOString(),
+      });
     });
     
     // Manejar errores de carga del modelo
@@ -125,6 +263,13 @@ const ARViewTest: React.FC = () => {
     document.addEventListener('loaded', () => {
       logger.info('Escena A-Frame cargada completamente');
     });
+    
+    // También escuchar eventos específicos de A-Frame
+    ['loaded', 'renderstart', 'renderstop', 'enter-vr', 'exit-vr', 'camera-ready'].forEach(eventName => {
+      document.addEventListener(eventName, () => {
+        logger.info(`Evento A-Frame capturado: ${eventName}`);
+      });
+    });
 
     // Limpiar listeners al desmontar
     return () => {
@@ -132,6 +277,10 @@ const ARViewTest: React.FC = () => {
       document.removeEventListener('model-error', () => {});
       document.removeEventListener('loaded', () => {});
       window.removeEventListener('error', () => {});
+      window.removeEventListener('unhandledrejection', () => {});
+      ['loaded', 'renderstart', 'renderstop', 'enter-vr', 'exit-vr', 'camera-ready'].forEach(eventName => {
+        document.removeEventListener(eventName, () => {});
+      });
     };
   }, []);
 
@@ -617,6 +766,13 @@ const ARViewTest: React.FC = () => {
   const getAframeHTML = () => {
     logger.info(`Generando HTML A-Frame con URL: ${currentModelUrl}`, { intento: modelLoadAttempts });
     
+    // Configurar parámetros de depuración para A-Frame
+    const debugConfig = DEBUG ? 
+      `stats="${DEBUG}" 
+       debug="true"
+       debug-helper` 
+      : '';
+    
     return `
       <a-scene 
         embedded
@@ -625,7 +781,10 @@ const ARViewTest: React.FC = () => {
         renderer="antialias: true; alpha: true; precision: mediump; logarithmicDepthBuffer: true;"
         id="scene"
         loading-screen="enabled: false"
-        stats="${DEBUG}">
+        ${debugConfig}>
+        
+        <!-- Inspector y Stats se cargarán si debug está activado -->
+        
         <a-assets timeout="3000000">
           <a-asset-item id="castillo-asset" src="${currentModelUrl}" 
             response-type="arraybuffer" crossorigin="anonymous"></a-asset-item>
