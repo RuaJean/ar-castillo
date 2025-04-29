@@ -9,6 +9,8 @@ import '../styles/ARView.css';
 const ARViewTest: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [arReady, setArReady] = useState(false);
+  const [modelLoading, setModelLoading] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(0);
   
   // Distancia de prueba en metros (modelo aparecerá a esta distancia del usuario)
   const testDistance = 15;
@@ -32,6 +34,44 @@ const ARViewTest: React.FC = () => {
     document.addEventListener('model-error', () => {
       setError('Error al cargar el modelo 3D. Por favor, verifica tu conexión a internet.');
     });
+    
+    // Pre-carga del modelo para mejorar el rendimiento
+    const modelLoader = new Image();
+    modelLoader.src = 'https://jeanrua.com/models/SantaMaria_futuro.glb';
+    
+    // Monitoreo de progreso de carga usando XMLHttpRequest
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', 'https://jeanrua.com/models/SantaMaria_futuro.glb', true);
+    xhr.responseType = 'arraybuffer';
+    
+    xhr.onprogress = (event) => {
+      if (event.lengthComputable) {
+        const percentComplete = Math.round((event.loaded / event.total) * 100);
+        setLoadingProgress(percentComplete);
+      }
+    };
+    
+    xhr.onload = () => {
+      setModelLoading(false);
+    };
+    
+    xhr.onerror = () => {
+      setError('Error al cargar el modelo 3D. Por favor, verifica tu conexión a internet.');
+    };
+    
+    xhr.send();
+
+    // Añadir listener para eventos de progreso de carga en A-Frame
+    document.addEventListener('model-loaded', () => {
+      setModelLoading(false);
+    });
+
+    return () => {
+      document.removeEventListener('model-loaded', () => {
+        setModelLoading(false);
+      });
+      xhr.abort();
+    };
   }, []);
 
   useEffect(() => {
@@ -62,31 +102,77 @@ const ARViewTest: React.FC = () => {
     }
   }, [arReady, randomAngle, testDistance]);
 
-  // Contenido A-Frame como HTML
+  // Contenido A-Frame como HTML con optimizaciones de rendimiento
   const aframeHTML = `
     <a-scene 
       embedded
       arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;"
       vr-mode-ui="enabled: false"
-      renderer="antialias: true; alpha: true; precision: mediump;"
-      id="scene">
+      renderer="antialias: true; alpha: true; precision: mediump; logarithmicDepthBuffer: true;"
+      id="scene"
+      loading-screen="enabled: false">
+      <a-assets timeout="30000">
+        <a-asset-item id="castillo-asset" src="https://jeanrua.com/models/SantaMaria_futuro.glb" 
+          response-type="arraybuffer" crossorigin="anonymous"></a-asset-item>
+      </a-assets>
+      
       <a-camera gps-camera rotation-reader></a-camera>
       
+      <!-- Modelo en low-poly mientras carga el completo -->
+      <a-box id="placeholder-model" position="0 0 -5" scale="2 2 2" color="#AAAAAA" opacity="0.5"
+        animation="property: opacity; to: 0; dur: 1000; easing: linear; startEvents: modelLoaded"></a-box>
+      
+      <!-- Modelo 3D principal con LOD (Level of Detail) -->
       <a-entity
         id="castillo-model"
         position="0 0 -5"
         scale="1 1 1"
         rotation="0 0 0"
-        gltf-model="https://jeanrua.com/models/SantaMaria_futuro.glb">
+        gltf-model="#castillo-asset"
+        visible="false"
+        animation="property: visible; to: true; dur: 1; delay: 500; startEvents: loaded">
       </a-entity>
       
       <!-- Indicador de dirección hacia el modelo -->
-      <a-entity id="direction-indicator">
-        <a-box position="0 0.5 -2" color="green" depth="0.1" height="0.1" width="0.5"></a-box>
-        <a-text value="Modelo 3D" position="0 0.7 -2" color="white" align="center"></a-text>
+      <a-entity id="direction-indicator" position="0 0 -2">
+        <a-box position="0 0.5 0" color="green" depth="0.1" height="0.1" width="0.5"></a-box>
+        <a-text value="Modelo 3D" position="0 0.7 0" color="white" align="center"></a-text>
+      </a-entity>
+      
+      <a-entity id="progress-indicator" position="0 0 -3" visible="true">
+        <a-text id="loading-text" value="Cargando modelo 3D..." position="0 0.5 0" color="white" align="center" scale="0.5 0.5 0.5"></a-text>
+        <a-plane id="progress-bar-bg" position="0 0 0" width="1" height="0.1" color="#333333"></a-plane>
+        <a-plane id="progress-bar" position="-0.5 0 0.01" width="0.01" height="0.08" color="#4CAF50" scale="${loadingProgress/100} 1 1"></a-plane>
+        <a-text id="progress-text" value="${loadingProgress}%" position="0 -0.2 0" color="white" align="center" scale="0.3 0.3 0.3"></a-text>
       </a-entity>
     </a-scene>
   `;
+
+  // Actualizar el progreso de carga en la escena
+  useEffect(() => {
+    if (!arReady) return;
+    
+    const progressBar = document.querySelector('#progress-bar');
+    const progressText = document.querySelector('#progress-text');
+    const progressIndicator = document.querySelector('#progress-indicator');
+    const placeholderModel = document.querySelector('#placeholder-model');
+    const castilloModel = document.querySelector('#castillo-model');
+    
+    if (progressBar && progressText) {
+      progressBar.setAttribute('scale', `${loadingProgress/100} 1 1`);
+      progressText.setAttribute('value', `${loadingProgress}%`);
+    }
+    
+    if (loadingProgress === 100 && progressIndicator) {
+      setTimeout(() => {
+        progressIndicator.setAttribute('visible', 'false');
+        if (placeholderModel && castilloModel) {
+          placeholderModel.dispatchEvent(new CustomEvent('modelLoaded'));
+          castilloModel.setAttribute('visible', 'true');
+        }
+      }, 1000);
+    }
+  }, [loadingProgress, arReady]);
 
   return (
     <div className="ar-container">
@@ -100,6 +186,15 @@ const ARViewTest: React.FC = () => {
       {!arReady && !error && (
         <div className="loading-overlay">
           <p>Inicializando cámara...</p>
+        </div>
+      )}
+      
+      {modelLoading && arReady && !error && (
+        <div className="model-loading-indicator">
+          <div className="progress-bar-container">
+            <div className="progress-bar" style={{ width: `${loadingProgress}%` }}></div>
+          </div>
+          <p>Cargando modelo 3D: {loadingProgress}%</p>
         </div>
       )}
       
