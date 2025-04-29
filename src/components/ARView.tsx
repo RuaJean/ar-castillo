@@ -11,6 +11,14 @@ const MODEL_URL = 'https://jeanrua.com/models/SantaMaria_futuro.glb';
 const MODEL_CACHE_KEY = 'ar-castillo-model-cache';
 const MODEL_CACHE_VERSION = 'v1';
 
+// Configuración de tiempos de espera muy altos
+const TIMEOUTS = {
+  modelLoad: 10000000, // 10,000 segundos
+  cameraInit: 60000,    // 60 segundos
+  verifyModel: 120000,  // 2 minutos
+  retryDelay: 30000     // 30 segundos
+};
+
 const ARView: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [arReady, setArReady] = useState(false);
@@ -127,7 +135,7 @@ const ARView: React.FC = () => {
   // Cargar modelo optimizado con sistema de reintentos
   const loadModelOptimized = useCallback(async (): Promise<ArrayBuffer | null> => {
     let attempts = 0;
-    const maxAttempts = 3;
+    const maxAttempts = 5; // Aumentamos el número de intentos
     
     // Primero intentamos cargar desde la caché
     const cachedModel = await loadModelFromCache();
@@ -139,7 +147,7 @@ const ARView: React.FC = () => {
     while (attempts < maxAttempts) {
       try {
         attempts++;
-        console.log(`Intento ${attempts} de ${maxAttempts} para cargar el modelo`);
+        console.log(`Intento ${attempts} de ${maxAttempts} para cargar el modelo desde ${MODEL_URL}`);
         
         // Usamos XMLHttpRequest para monitorear el progreso
         const modelData = await new Promise<ArrayBuffer>((resolve, reject) => {
@@ -147,17 +155,25 @@ const ARView: React.FC = () => {
           xhr.open('GET', MODEL_URL, true);
           xhr.responseType = 'arraybuffer';
           
+          // Timeout extremadamente largo
+          xhr.timeout = TIMEOUTS.modelLoad;
+          
           // Monitorear el progreso de la descarga
           xhr.onprogress = (event) => {
             if (event.lengthComputable) {
               const percentComplete = Math.round((event.loaded / event.total) * 100);
               setLoadingProgress(percentComplete);
+              console.log(`Progreso de carga: ${percentComplete}% (${formatBytes(event.loaded)}/${formatBytes(event.total)})`);
+            } else {
+              // Si no podemos calcular el progreso, mostramos al menos los bytes descargados
+              console.log(`Descargados ${formatBytes(event.loaded)} bytes`);
             }
           };
           
           xhr.onload = function() {
             if (this.status === 200) {
               setLoadingProgress(100);
+              console.log(`Modelo descargado completo: ${formatBytes(this.response.byteLength)} bytes`);
               resolve(this.response);
             } else {
               reject(new Error(`Error al cargar modelo: ${this.status}`));
@@ -182,6 +198,10 @@ const ARView: React.FC = () => {
           return modelData;
         } else {
           console.warn('Modelo cargado con tamaño sospechoso:', modelData?.byteLength || 0, 'bytes');
+          if (attempts >= maxAttempts) {
+            setError(`El modelo parece ser demasiado pequeño (${modelData?.byteLength || 0} bytes). Intenta recargar la página.`);
+            return null;
+          }
           continue; // Reintentar
         }
       } catch (err) {
@@ -192,22 +212,36 @@ const ARView: React.FC = () => {
           return null;
         }
         
-        // Esperar antes del siguiente intento (backoff exponencial)
-        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempts - 1)));
+        // Esperar antes del siguiente intento (backoff exponencial) con tiempo de espera más largo
+        await new Promise(resolve => setTimeout(resolve, TIMEOUTS.retryDelay));
       }
     }
     
     return null;
   }, [loadModelFromCache, cacheModel]);
 
+  // Función de utilidad para formatear bytes
+  const formatBytes = (bytes: number, decimals = 2) => {
+    if (bytes === 0) return '0 Bytes';
+    
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+  };
+
   useEffect(() => {
     // Solicitar acceso a la cámara explícitamente antes de inicializar AR.js
     navigator.mediaDevices.getUserMedia({ video: true })
       .then(() => {
-        // Pequeño retraso para asegurar que la cámara esté lista
+        // Tiempo de espera más largo para asegurar que la cámara esté lista
         setTimeout(() => {
           setArReady(true);
-        }, 1000);
+          console.log('Cámara inicializada correctamente, AR listo');
+        }, TIMEOUTS.cameraInit / 10); // Un décimo del timeout total
       })
       .catch(err => {
         setError(`Error al acceder a la cámara: ${err instanceof Error ? err.message : String(err)}`);
@@ -215,24 +249,30 @@ const ARView: React.FC = () => {
 
     // Escuchar eventos de errores en la carga del modelo
     document.addEventListener('model-error', () => {
-      setError('Error al cargar el modelo 3D. Por favor, verifica tu conexión a internet.');
+      console.error('Evento model-error detectado');
+      // No establecemos error inmediatamente para permitir que el sistema de reintentos funcione
     });
 
     // Comienza la precarga del modelo tan pronto como sea posible
+    console.log('Iniciando carga optimizada del modelo...');
     loadModelOptimized()
       .then(buffer => {
         if (buffer) {
+          console.log(`Modelo cargado exitosamente: ${formatBytes(buffer.byteLength)}`);
           setModelBuffer(buffer);
           setModelLoading(false);
+        } else {
+          console.error('La carga del modelo devolvió null');
         }
       })
       .catch(err => {
-        console.error('Error al cargar el modelo:', err);
-        setError('Error al cargar el modelo 3D. Por favor, verifica tu conexión a internet.');
+        console.error('Error crítico al cargar el modelo:', err);
+        setError('Error al cargar el modelo 3D. Por favor, verifica tu conexión a internet e intenta nuevamente.');
       });
 
     // Escuchar eventos de carga del modelo en A-Frame
     document.addEventListener('model-loaded', () => {
+      console.log('Evento model-loaded recibido');
       setModelLoading(false);
     });
 
@@ -307,6 +347,7 @@ const ARView: React.FC = () => {
       
       // Crear una URL de objeto para el blob
       const objectURL = URL.createObjectURL(blob);
+      console.log('URL de objeto creada correctamente');
       return objectURL;
     } catch (err) {
       console.error('Error al crear URL de objeto para el modelo', err);
@@ -370,13 +411,17 @@ const ARView: React.FC = () => {
     }
     
     if (loadingProgress === 100 && progressIndicator) {
+      // Tiempo de espera más largo para la transición
       setTimeout(() => {
-        progressIndicator.setAttribute('visible', 'false');
+        console.log('Carga de modelo completa, mostrando modelo 3D');
+        if (progressIndicator) {
+          progressIndicator.setAttribute('visible', 'false');
+        }
         if (placeholderModel && castilloModel) {
           placeholderModel.dispatchEvent(new CustomEvent('modelLoaded'));
           castilloModel.setAttribute('visible', 'true');
         }
-      }, 1000);
+      }, TIMEOUTS.verifyModel / 20); // Un veinteavo del timeout total
     }
   }, [loadingProgress, arReady]);
 
