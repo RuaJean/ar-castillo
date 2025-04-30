@@ -92,10 +92,15 @@ const logEnvironmentInfo = () => {
         });
       } catch (e) {
         logger.warn('Error al obtener información WebGL detallada', e);
-         logger.info('Información WebGL básica:', {
-            version: gl.getParameter(gl.VERSION),
-            vendor: gl.getParameter(gl.VENDOR),
-          });
+         // Usar type guard para acceder a parámetros básicos
+         if (gl instanceof WebGLRenderingContext) { 
+             logger.info('Información WebGL básica:', {
+                version: gl.getParameter(gl.VERSION),
+                vendor: gl.getParameter(gl.VENDOR),
+              });
+        } else {
+            logger.warn('No se pudo obtener información WebGL básica (contexto no es WebGLRenderingContext).');
+        }
       }
     } else {
       logger.warn('WebGL no está soportado en este navegador');
