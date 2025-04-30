@@ -6,7 +6,7 @@ Este proyecto permite visualizar un modelo 3D en realidad aumentada vinculado a 
 
 - Geolocalización en tiempo real del usuario
 - Cálculo de distancia entre el usuario y la ubicación objetivo
-- Visualización de un modelo 3D (SantaMaria_futuro.glb) en realidad aumentada
+- Visualización de un modelo 3D (SantaMaria_futuro_packed_draco.glb) en realidad aumentada
 - Capacidad para caminar alrededor y dentro del modelo
 
 ## Coordenadas Objetivo

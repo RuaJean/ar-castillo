@@ -148,9 +148,9 @@ const logEnvironmentInfo = () => {
 
 // URLs de modelos alternativos
 const MODEL_URLS = {
-  remote: 'https://jeanrua.com/models/SantaMaria_futuro.glb',
-  local: '/SantaMaria_futuro.glb',
-  backup: 'https://raw.githubusercontent.com/jeanrua/ar-castillo/main/public/SantaMaria_futuro.glb',
+  remote: 'https://jeanrua.com/models/SantaMaria_futuro_packed_draco.glb',
+  local: '/SantaMaria_futuro_packed_draco.glb',
+  backup: 'https://raw.githubusercontent.com/jeanrua/ar-castillo/main/public/SantaMaria_futuro_packed_draco.glb',
   fallback: '/castle.glb', // Modelo más simple por si todo falla
   simplified: '/castle_low.glb' // Versión aún más ligera (si existe)
 };

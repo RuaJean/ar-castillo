@@ -77,11 +77,11 @@ const ARView: React.FC = () => {
 
     // Pre-carga del modelo para mejorar el rendimiento
     const modelLoader = new Image();
-    modelLoader.src = 'https://jeanrua.com/models/SantaMaria_futuro.glb';
+    modelLoader.src = 'https://jeanrua.com/models/SantaMaria_futuro_packed_draco.glb';
     
     // Monitoreo de progreso de carga usando XMLHttpRequest
     const xhr = new XMLHttpRequest();
-    xhr.open('GET', 'https://jeanrua.com/models/SantaMaria_futuro.glb', true);
+    xhr.open('GET', 'https://jeanrua.com/models/SantaMaria_futuro_packed_draco.glb', true);
     xhr.responseType = 'arraybuffer';
     
     xhr.onprogress = (event) => {
@@ -183,7 +183,7 @@ const ARView: React.FC = () => {
       id="scene"
       loading-screen="enabled: false">
       <a-assets timeout="3000000">
-        <a-asset-item id="castillo-asset" src="https://jeanrua.com/models/SantaMaria_futuro.glb" 
+        <a-asset-item id="castillo-asset" src="https://jeanrua.com/models/SantaMaria_futuro_packed_draco.glb" 
           response-type="arraybuffer" crossorigin="anonymous"></a-asset-item>
       </a-assets>
       
