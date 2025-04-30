@@ -450,6 +450,18 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
           <button onClick={() => window.history.back()} className="geo-ar-back-btn">
             Volver
           </button>
+          
+          {/* Nuevo botón para experiencia con ubicación fija */}
+          <button 
+            onClick={() => window.location.href = '/ar-fijo'} 
+            className="geo-ar-fixed-location-btn"
+            style={{
+              backgroundColor: '#4e9a06',
+              marginTop: '10px'
+            }}
+          >
+            Experiencia AR en Ubicación Fija
+          </button>
         </div>
       )}
 
