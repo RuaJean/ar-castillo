@@ -156,7 +156,7 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
     const modelPosition = calculatePointAtDistance(
       initialCoords.latitude, 
       initialCoords.longitude, 
-      10, // 10 metros de distancia (reducido de 20m)
+      15, // 10 metros de distancia (reducido de 20m)
       0   // Dirección norte (0 grados)
     );
     
