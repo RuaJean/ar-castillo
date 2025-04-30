@@ -284,8 +284,9 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       // Crear la escena A-Frame
       const scene = document.createElement('a-scene');
       scene.setAttribute('embedded', '');
-      // Configurar AR.js en modo "mono_and_matrix" con ubicación activada
-      scene.setAttribute('arjs', 'sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix;');
+      // Usar configuración mejorada de AR.js para mejor seguimiento de posición
+      scene.setAttribute('arjs', 'sourceType: webcam; debugUIEnabled: false; trackingMethod: best;');
+      scene.setAttribute('vr-mode-ui', 'enabled: false');
       arContainer.appendChild(scene);
 
       // Añadir entorno para mejor percepción de profundidad
@@ -293,72 +294,164 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       environment.setAttribute('id', 'environment');
       scene.appendChild(environment);
 
+      // Crear el contenedor para el modelo
+      const modelContainer = document.createElement('a-entity');
+      modelContainer.setAttribute('id', 'model-container');
+      modelContainer.setAttribute('position', '0 0 0');
+      scene.appendChild(modelContainer);
+      
       // Agregar marcador visual para ayudar a localizar el modelo
       const marker = document.createElement('a-box');
-      marker.setAttribute('gps-projected-entity-place', `latitude: ${modelPosition.latitude}; longitude: ${modelPosition.longitude}`);
       marker.setAttribute('scale', '1 5 1');
       marker.setAttribute('position', '0 2.5 0');
       marker.setAttribute('color', '#FF5733');
       marker.setAttribute('emissive', '#FF5733');
       marker.setAttribute('emissive-intensity', '0.5');
-      scene.appendChild(marker);
+      modelContainer.appendChild(marker);
       
-      // Agregar la entidad del modelo 3D a 10 metros de distancia
+      // Agregar el modelo 3D
       const entity = document.createElement('a-entity');
+      entity.setAttribute('id', 'main-model');
       entity.setAttribute('gltf-model', selectedModel);
-      entity.setAttribute('gps-projected-entity-place', `latitude: ${modelPosition.latitude}; longitude: ${modelPosition.longitude}`);
-      entity.setAttribute('scale', '15 15 15'); // Aumentado tamaño para mejor visibilidad
+      entity.setAttribute('scale', '15 15 15'); // Tamaño aumentado para mejor visibilidad
       entity.setAttribute('position', '0 0 0');
       entity.setAttribute('rotation', '0 0 0');
-      scene.appendChild(entity);
+      modelContainer.appendChild(entity);
       modelEntityRef.current = entity;
-      console.log('[GeoAR] Modelo 3D agregado a 10 metros de distancia del usuario');
 
-      // Crear la cámara que sigue al usuario
-      const camera = document.createElement('a-camera');
-      camera.setAttribute('gps-projected-camera', '');
-      camera.setAttribute('rotation-reader', '');
-      camera.setAttribute('look-controls', 'pointerLockEnabled: false');
+      // Crear la cámara
+      const camera = document.createElement('a-entity');
+      camera.setAttribute('id', 'camera');
+      camera.setAttribute('camera', '');
       camera.setAttribute('position', '0 1.6 0');
+      camera.setAttribute('wasd-controls', 'acceleration: 100');
+      camera.setAttribute('look-controls', '');
       scene.appendChild(camera);
       cameraRef.current = camera;
-      console.log('[GeoAR] Cámara AR creada.');
-
-      // Escuchar el evento "loaded" de la escena
+      
+      console.log('[GeoAR] Modelo 3D y cámara configurados');
+      
+      // Variables para seguimiento de la posición
+      let lastLat = coords.latitude;
+      let lastLon = coords.longitude;
+      let cameraWorldPosition = { x: 0, y: 1.6, z: 0 };
+      let initialModelPosition = null;
+      
+      // Mostrar panel de información
+      const infoPanel = document.createElement('div');
+      infoPanel.className = 'ar-info-panel';
+      infoPanel.style.position = 'fixed';
+      infoPanel.style.bottom = '10px';
+      infoPanel.style.left = '50%';
+      infoPanel.style.transform = 'translateX(-50%)';
+      infoPanel.style.backgroundColor = 'rgba(0,0,0,0.7)';
+      infoPanel.style.color = 'white';
+      infoPanel.style.padding = '10px';
+      infoPanel.style.borderRadius = '5px';
+      infoPanel.style.zIndex = '2500';
+      infoPanel.style.textAlign = 'center';
+      infoPanel.style.width = '80%';
+      infoPanel.innerHTML = 'Inicializando rastreo de movimiento...';
+      arContainer.appendChild(infoPanel);
+      
+      // Inicializar el modelo en la posición fija basada en GPS
       scene.addEventListener('loaded', () => {
         console.log('[GeoAR] Escena AR cargada correctamente');
-        // Configurar actualizaciones de posición
+        
+        // Colocar el modelo en su posición inicial en la escena
+        initialModelPosition = {
+          latitude: modelPosition.latitude,
+          longitude: modelPosition.longitude
+        };
+        
+        // Configurar seguimiento continuo de GPS
         if ('geolocation' in navigator) {
-          navigator.geolocation.watchPosition((position) => {
-            const currentCamera = cameraRef.current;
-            if (currentCamera) {
-              console.log('[GeoAR] Actualizando posición de cámara según movimiento del usuario');
-              
-              // Calcular distancia al modelo
-              const userPos = { 
-                latitude: position.coords.latitude, 
-                longitude: position.coords.longitude 
-              };
-              const distanceToModel = calculateDistance(userPos, modelPosition);
-              
-              // Actualizar display con distancia
-              const coordsDisplay = document.querySelector('.ar-coords-display');
-              if (coordsDisplay) {
-                coordsDisplay.innerHTML = `
-                  <p>Tu ubicación:</p>
-                  <p>Lat: ${position.coords.latitude.toFixed(6)}</p>
-                  <p>Lon: ${position.coords.longitude.toFixed(6)}</p>
-                  <p>Modelo a ${distanceToModel.toFixed(1)}m al norte</p>
-                  <p><b>Busca el marcador naranja</b></p>
+          const watchId = navigator.geolocation.watchPosition(
+            (position) => {
+              try {
+                const currentLat = position.coords.latitude;
+                const currentLon = position.coords.longitude;
+                const heading = position.coords.heading;
+                
+                // Calcular diferencia en metros entre la posición actual y la anterior
+                const distNorth = (currentLat - lastLat) * 111111;
+                const distEast = (currentLon - lastLon) * 111111 * Math.cos(lastLat * Math.PI / 180);
+                
+                // Actualizar variables de seguimiento
+                lastLat = currentLat;
+                lastLon = currentLon;
+                
+                // Calcular nueva posición de cámara basada en el movimiento GPS
+                cameraWorldPosition.x += distEast;
+                cameraWorldPosition.z += distNorth;
+                
+                // Mover el contenedor del modelo en dirección opuesta al movimiento de la cámara
+                modelContainer.setAttribute('position', 
+                  `${-cameraWorldPosition.x} 0 ${-cameraWorldPosition.z}`);
+                
+                // Calcular distancia entre la posición actual y el modelo
+                const distanceToModel = calculateDistance(
+                  { latitude: currentLat, longitude: currentLon },
+                  initialModelPosition
+                );
+                
+                // Determinar si estamos dentro del modelo (aproximado, basado en distancia)
+                const isInsideModel = distanceToModel < 5; // Consideramos "dentro" si estamos a menos de 5m
+                
+                // Actualizar panel informativo
+                infoPanel.innerHTML = `
+                  <div>Distancia al modelo: ${distanceToModel.toFixed(1)}m</div>
+                  <div>Estado: ${isInsideModel ? '¡Estás DENTRO del modelo!' : 'Estás fuera del modelo'}</div>
+                  <div>Movimiento: ${Math.sqrt(distNorth*distNorth + distEast*distEast).toFixed(2)}m</div>
+                  <div style="font-size:10px">Lat: ${currentLat.toFixed(6)}, Lon: ${currentLon.toFixed(6)}</div>
                 `;
+                
+                // Actualizar estilo del panel según si estamos dentro o fuera
+                infoPanel.style.backgroundColor = isInsideModel ? 'rgba(46,204,113,0.8)' : 'rgba(0,0,0,0.7)';
+                
+                console.log(`[GeoAR] Movimiento: ${distNorth.toFixed(2)}m Norte, ${distEast.toFixed(2)}m Este, Distancia al modelo: ${distanceToModel.toFixed(2)}m`);
+              } catch (e) {
+                console.error('[GeoAR] Error procesando posición:', e);
               }
+            },
+            (err) => {
+              console.error('[GeoAR] Error en seguimiento GPS:', err);
+              infoPanel.innerHTML = `Error de GPS: ${err.message}`;
+              infoPanel.style.backgroundColor = 'rgba(231,76,60,0.8)';
+            },
+            { 
+              enableHighAccuracy: true, 
+              maximumAge: 0, 
+              timeout: 15000
             }
-          }, 
-          (err) => console.error('[GeoAR] Error en seguimiento:', err), 
-          { enableHighAccuracy: true, maximumAge: 0, timeout: 27000 });
+          );
+          
+          setGpsWatchId(watchId);
         }
       });
+      
       arSceneRef.current = scene;
+
+      // Botón para reiniciar posición
+      const resetButton = document.createElement('button');
+      resetButton.textContent = 'Reiniciar Posición';
+      resetButton.style.position = 'fixed';
+      resetButton.style.bottom = '70px';
+      resetButton.style.right = '10px';
+      resetButton.style.zIndex = '2000';
+      resetButton.style.padding = '8px 16px';
+      resetButton.style.backgroundColor = '#3498db';
+      resetButton.style.color = 'white';
+      resetButton.style.border = 'none';
+      resetButton.style.borderRadius = '4px';
+      resetButton.addEventListener('click', () => {
+        // Reiniciar la posición de la cámara y el modelo
+        cameraWorldPosition = { x: 0, y: 1.6, z: 0 };
+        modelContainer.setAttribute('position', '0 0 0');
+        console.log('[GeoAR] Posición reiniciada');
+        infoPanel.innerHTML = 'Posición reiniciada. ¡Comienza a caminar!';
+      });
+      arContainer.appendChild(resetButton);
 
       // Botón para volver
       const backButton = document.createElement('button');
@@ -374,6 +467,9 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       backButton.style.border = 'none';
       backButton.style.borderRadius = '4px';
       backButton.addEventListener('click', () => {
+        if (gpsWatchId) {
+          navigator.geolocation.clearWatch(gpsWatchId);
+        }
         if (arContainer.parentNode) {
           arContainer.parentNode.removeChild(arContainer);
           console.log('[GeoAR] Contenedor AR eliminado.');
@@ -422,26 +518,6 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       modelSelector.appendChild(selectElement);
       arContainer.appendChild(modelSelector);
 
-      // Mostrar las coordenadas (opcional)
-      const coordsDisplay = document.createElement('div');
-      coordsDisplay.className = 'ar-coords-display';
-      coordsDisplay.style.position = 'fixed';
-      coordsDisplay.style.top = '60px';
-      coordsDisplay.style.left = '10px';
-      coordsDisplay.style.zIndex = '2000';
-      coordsDisplay.style.backgroundColor = 'rgba(0,0,0,0.7)';
-      coordsDisplay.style.color = 'white';
-      coordsDisplay.style.padding = '8px';
-      coordsDisplay.style.borderRadius = '4px';
-      coordsDisplay.style.fontSize = '12px';
-      coordsDisplay.innerHTML = `
-        <p>Tu ubicación:</p>
-        <p>Lat: ${coords.latitude.toFixed(6)}</p>
-        <p>Lon: ${coords.longitude.toFixed(6)}</p>
-        <p>Modelo a 10m al norte</p>
-        <p><b>Busca el marcador naranja</b></p>
-      `;
-      arContainer.appendChild(coordsDisplay);
       console.log('[GeoAR] Escena AR configurada con éxito.');
     }
   };
