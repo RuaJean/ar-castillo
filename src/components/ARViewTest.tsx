@@ -400,8 +400,16 @@ const ARViewTest: React.FC = () => {
 
         // --- Validaciones del contenido descargado ---
         if (!responseData || responseData.byteLength < MODEL_LOAD_CONFIG.minValidSizeBytes) {
-          logger.error('Respuesta inválida o demasiado pequeña.', { size: responseData?.byteLength });
-          setLoadingErrors(prev => [...prev, `Modelo inválido o corrupto (${formatBytes(responseData?.byteLength)})`]);
+          logger.error('Respuesta inválida o demasiado pequeña.', { 
+              size: responseData?.byteLength, 
+              expectedMin: MODEL_LOAD_CONFIG.minValidSizeBytes 
+          });
+          // Loguear inicio de la respuesta para depuración
+          try {
+            const firstChars = new TextDecoder().decode(responseData.slice(0, 100));
+            logger.warn(`Inicio de la respuesta recibida (puede ser HTML): ${firstChars}...`);
+          } catch {}
+          setLoadingErrors(prev => [...prev, `Modelo inválido/corrupto (${formatBytes(responseData?.byteLength)})`]);
           retry(); // Intentar siguiente URL
           return;
         }
@@ -550,7 +558,7 @@ const ARViewTest: React.FC = () => {
 
           setIsLastAttempt(true); // Marcar como último intento
           setError(null); // Limpiar error principal para mostrar carga del último intento
-          // loadingErrors se mantienen para info
+          setLoadingProgress(0); // Resetear progreso para el último intento
 
           const finalUrl = MODEL_URLS.simplified || MODEL_URLS.fallback;
           setCurrentModelUrl(finalUrl); // Esto dispara el useEffect[currentModelUrl] que llama a loadModel
@@ -565,8 +573,9 @@ const ARViewTest: React.FC = () => {
 
         // --- Si no hemos llegado al límite de la ronda, proceder con el siguiente intento ---
         logger.info(`Preparando siguiente intento (Intento de ronda ${modelLoadAttempts + 1}/${MODEL_LOAD_CONFIG.maxAttempts})`);
+        setLoadingProgress(0); // <-- Resetear progreso ANTES del siguiente intento
 
-        const nextUrl = selectModelUrl(modelLoadAttempts); // Obtener URL para el *siguiente* intento (el estado aún no se actualiza)
+        const nextUrl = selectModelUrl(modelLoadAttempts); // Obtener URL para el *siguiente* intento
         logger.info(`Siguiente URL seleccionada: ${nextUrl}`);
         setCurrentModelUrl(nextUrl); // Actualizar estado -> dispara useEffect[currentModelUrl] -> llama a loadModel
          // modelLoadAttempts se incrementará dentro del próximo loadModel
