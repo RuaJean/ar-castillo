@@ -8,12 +8,9 @@ import '../styles/ARView.css';
 
 // Sistema de logging para depuración
 const DEBUG = true;
-const MOBILE_DEBUG = false; // Solo activar logging extenso en móviles si es necesario
-const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
 const logger = {
   info: (message: string, ...args: any[]) => {
-    if (DEBUG && (!isMobile || MOBILE_DEBUG)) console.info(`[AR-DEBUG][INFO] ${message}`, ...args);
+    if (DEBUG) console.info(`[AR-DEBUG][INFO] ${message}`, ...args);
   },
   warn: (message: string, ...args: any[]) => {
     if (DEBUG) console.warn(`[AR-DEBUG][WARN] ${message}`, ...args);
@@ -22,39 +19,56 @@ const logger = {
     if (DEBUG) console.error(`[AR-DEBUG][ERROR] ${message}`, ...args);
   },
   log: (message: string, ...args: any[]) => {
-    if (DEBUG && (!isMobile || MOBILE_DEBUG)) console.log(`[AR-DEBUG][LOG] ${message}`, ...args);
+    if (DEBUG) console.log(`[AR-DEBUG][LOG] ${message}`, ...args);
   }
 };
 
-// Función para habilitar el modo debug de A-Frame (si está disponible)
-const enableAFrameDebug = (): boolean => {
+// Función segura para habilitar el modo de depuración de A-Frame
+const enableAFrameDebug = () => {
   try {
     if (typeof window !== 'undefined' && window.AFRAME) {
       logger.info('AFRAME encontrado en window', {
         version: window.AFRAME.version,
+        hasDebug: !!window.AFRAME.debug,
+        hasUtils: !!window.AFRAME.utils,
+        components: Object.keys(window.AFRAME.components || {}).length,
       });
-
-      // Método 1: Activar stats y debug a través de atributos de la escena
-      // Esto se hará ahora en getStaticAframeHTML
-
-      // Registrar componente helper si es necesario (puede que ya no sea necesario)
-      if (window.AFRAME.registerComponent) {
-        window.AFRAME.registerComponent('debug-helper', {
-          init: function() {
-            logger.info('Componente debug-helper inicializado (si se usa)');
-          }
-        });
+      
+      // Método 1: API debug.enable() (puede no estar disponible)
+      if (window.AFRAME.debug && typeof window.AFRAME.debug.enable === 'function') {
+        window.AFRAME.debug.enable();
+        logger.info('Modo debug de A-Frame activado usando debug.enable()');
         return true;
       }
-
-      logger.warn('No se pudo registrar componente debug-helper');
+      
+      // Método 2: Configurar debug en registerComponent (alternativa)
+      if (window.AFRAME.registerComponent) {
+        logger.info('Intentando activar debug mediante atributos');
+        
+        // Crear componente de depuración personalizado
+        window.AFRAME.registerComponent('debug-helper', {
+          init: function() {
+            logger.info('Componente debug-helper inicializado');
+            // Activar estadísticas de rendimiento si THREE está disponible
+            if (window.AFRAME.THREE && window.AFRAME.THREE.Stats) {
+              const stats = new window.AFRAME.THREE.Stats();
+              document.body.appendChild(stats.dom);
+              logger.info('Stats de THREE.js añadidos al DOM');
+            }
+          }
+        });
+        
+        return true;
+      }
+      
+      logger.warn('No se pudo activar el modo debug de A-Frame');
       return false;
     } else {
       logger.warn('A-Frame no está disponible en window');
       return false;
     }
   } catch (error) {
-    logger.error('Error al intentar configurar debug de A-Frame', error);
+    logger.error('Error al intentar habilitar el debug de A-Frame', error);
     return false;
   }
 };
@@ -71,47 +85,60 @@ const logEnvironmentInfo = () => {
       hardwareConcurrency: navigator.hardwareConcurrency || 'No disponible',
       url: window.location.href,
       protocol: window.location.protocol,
-      screenSize: `${window.screen?.width}x${window.screen?.height}`,
+      screenSize: `${window.screen.width}x${window.screen.height}`,
       devicePixelRatio: window.devicePixelRatio,
     });
-
+    
     // Comprobar WebGL
     const canvas = document.createElement('canvas');
     const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-
+    
     if (gl) {
       try {
+        // Asegurar que TypeScript reconoce gl como WebGLRenderingContext
         const webgl = gl as WebGLRenderingContext;
         const debugInfo = webgl.getExtension('WEBGL_debug_renderer_info');
-        logger.info('Información WebGL:', {
-            vendor: debugInfo ? webgl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) : webgl.getParameter(webgl.VENDOR),
-            renderer: debugInfo ? webgl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : 'N/A',
+        
+        if (debugInfo) {
+          logger.info('Información WebGL:', {
+            vendor: webgl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL),
+            renderer: webgl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL),
             version: webgl.getParameter(webgl.VERSION),
             shadingLanguageVersion: webgl.getParameter(webgl.SHADING_LANGUAGE_VERSION),
             maxTextureSize: webgl.getParameter(webgl.MAX_TEXTURE_SIZE)
-        });
-      } catch (e) {
-        logger.warn('Error al obtener información WebGL detallada', e);
-         // Usar type guard para acceder a parámetros básicos
-         if (gl instanceof WebGLRenderingContext) { 
-             logger.info('Información WebGL básica:', {
-                version: gl.getParameter(gl.VERSION),
-                vendor: gl.getParameter(gl.VENDOR),
-              });
+          });
         } else {
-            logger.warn('No se pudo obtener información WebGL básica (contexto no es WebGLRenderingContext).');
+          logger.info('Información WebGL básica:', {
+            version: webgl.getParameter(webgl.VERSION),
+            vendor: webgl.getParameter(webgl.VENDOR),
+          });
         }
+      } catch (e) {
+        logger.warn('Error al obtener información WebGL', e);
       }
     } else {
       logger.warn('WebGL no está soportado en este navegador');
     }
-
+    
+    // Scripts cargados
+    const scripts = Array.from(document.scripts).map(s => ({
+      src: s.src,
+      type: s.type,
+      async: s.async,
+      defer: s.defer
+    }));
+    
+    logger.info(`Scripts cargados: ${scripts.length}`);
+    
     // Bibliotecas detectadas
     const libraries = {
       aframe: typeof window.AFRAME !== 'undefined',
       three: typeof (window as any).THREE !== 'undefined',
+      jquery: typeof (window as any).jQuery !== 'undefined',
+      react: typeof (window as any).React !== 'undefined',
       arjs: typeof (window as any).ARjs !== 'undefined'
     };
+    
     logger.info('Bibliotecas detectadas:', libraries);
   } catch (error) {
     logger.error('Error al recopilar información del entorno', error);
@@ -124,649 +151,709 @@ const MODEL_URLS = {
   local: '/SantaMaria_futuro.glb',
   backup: 'https://raw.githubusercontent.com/jeanrua/ar-castillo/main/public/SantaMaria_futuro.glb',
   fallback: '/castle.glb', // Modelo más simple por si todo falla
-  simplified: '/castle_low.glb', // Versión aún más ligera (si existe)
-  mobile: '/castle_mobile.glb' // Versión específica para móviles (si existe)
+  simplified: '/castle_low.glb' // Versión aún más ligera (si existe)
 };
 
 // Configuración avanzada para la carga del modelo
 const MODEL_LOAD_CONFIG = {
-  maxAttempts: 3,                 // Reducido para móviles (era 4)
-  timeoutMs: isMobile ? 60000 : 120000, // Timeout reducido para móviles
-  minValidSizeBytes: 10000,       // Tamaño mínimo esperado para un modelo GLB válido
-  retryDelayMs: 1500,             // Retraso entre intentos de carga (aumentado ligeramente)
-  progressThrottleMs: isMobile ? 500 : 200, // Menos actualizaciones en móviles
-  maxTextureSize: isMobile ? 1024 : 2048,  // Limitar tamaño de texturas en móviles
-  maxGlobalAttempts: 5,           // Máximo absoluto de intentos incluyendo reset
-};
-
-// Utilidad para formatear bytes en forma legible
-const formatBytes = (bytes: number | undefined | null, decimals = 2): string => {
-    if (bytes === undefined || bytes === null || bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const dm = decimals < 0 ? 0 : decimals;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-    try {
-      // Handle potential negative or non-finite values from incorrect API results
-      if (!Number.isFinite(bytes) || bytes < 0) {
-        return 'N/A';
-      }
-      const i = Math.floor(Math.log(bytes) / Math.log(k));
-      // Asegurar que i esté dentro de los límites del array sizes
-      const safeIndex = Math.max(0, Math.min(i, sizes.length - 1));
-      return parseFloat((bytes / Math.pow(k, safeIndex)).toFixed(dm)) + ' ' + sizes[safeIndex];
-    } catch (e) {
-      // Log error only in debug mode to avoid console spam in production
-      if (DEBUG) logger.warn(`Error formateando bytes: ${bytes}`, e);
-      return `${bytes} Bytes`; // Fallback
-    }
-};
-
-// Seleccionar la URL del modelo más adecuada para la situación actual
-const selectModelUrl = (attemptNumber: number): string => {
-  logger.info(`Seleccionando URL para intento de ronda: ${attemptNumber + 1}`); // Log 1-based attempt
-
-  // Para móviles, intentar primero una versión específica si es el intento 0
-  if (isMobile && attemptNumber === 0) {
-    logger.info('Intento 1 (Móvil): Usando versión móvil o fallback');
-    return MODEL_URLS.mobile || MODEL_URLS.fallback; // Fallback si no hay versión móvil
-  }
-
-  if (attemptNumber === 0) {
-    // Primer intento (no móvil, o móvil sin versión específica)
-    if (window.location.protocol === 'https:') {
-      logger.info('Intento 1: Usando URL remota (HTTPS)');
-      return MODEL_URLS.remote;
-    } else {
-      logger.info('Intento 1: Usando URL local (HTTP)');
-      return MODEL_URLS.local;
-    }
-  } else if (attemptNumber === 1) {
-    // Segundo intento
-    if (isMobile) {
-      logger.info('Intento 2 (Móvil): Usando modelo simplificado (fallback)');
-      return MODEL_URLS.fallback;
-    } else {
-      logger.info('Intento 2 (No Móvil): Usando URL de backup GitHub');
-      return MODEL_URLS.backup;
-    }
-  } else { // attemptNumber >= 2 (Tercer intento de la ronda)
-    logger.info(`Intento ${attemptNumber + 1}: Usando modelo simplificado (fallback)`);
-    return MODEL_URLS.fallback;
-  }
+  maxAttempts: 4,             // Número máximo de intentos de carga
+  timeoutMs: 120000,          // Timeout para la carga (2 minutos)
+  minValidSizeBytes: 10000,   // Tamaño mínimo esperado para un modelo GLB válido
+  retryDelayMs: 1000,         // Retraso entre intentos de carga
+  progressThrottleMs: 200,    // Limitar actualizaciones de progreso para mejor rendimiento
 };
 
 const ARViewTest: React.FC = () => {
-  const [arReady, setArReady] = useState(false);
-  const [cameraActive, setCameraActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [modelLoading, setModelLoading] = useState(false); // Inicia en false
+  const [arReady, setArReady] = useState(false);
+  const [modelLoading, setModelLoading] = useState(true);
   const [loadingProgress, setLoadingProgress] = useState(0);
-  const [modelLoadAttempts, setModelLoadAttempts] = useState(0); // Intentos de la ronda actual
-  const [globalAttempts, setGlobalAttempts] = useState(0); // Contador global para evitar bucles infinitos
-  const [isLastAttempt, setIsLastAttempt] = useState(false); // Flag para marcar el último intento (simplificado)
-  const [currentModelUrl, setCurrentModelUrl] = useState<string | null>(null); // URL que se está intentando cargar
+  const [cameraActive, setCameraActive] = useState(false);
+  const [modelLoadAttempts, setModelLoadAttempts] = useState(0);
+  const [currentModelUrl, setCurrentModelUrl] = useState('');
   const [loadingErrors, setLoadingErrors] = useState<string[]>([]);
-
-  const sceneContainerRef = useRef<HTMLDivElement>(null); // Ref para el div contenedor
-  const sceneElRef = useRef<any>(null); // Ref para la entidad <a-scene>
-  const modelEntityRef = useRef<any>(null); // Ref para la entidad <a-entity id="castillo-model">
-  const assetItemRef = useRef<any>(null); // Ref para <a-asset-item id="castillo-asset">
+  const sceneContainerRef = useRef<HTMLDivElement>(null);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
-  const initialLoadTriggered = useRef(false); // Flag para controlar la carga inicial
+  
+  // Distancia de prueba en metros (modelo aparecerá a esta distancia del usuario)
+  const testDistance = 15;
+  // Ángulo aleatorio para posicionar el modelo (0-360 grados)
+  const randomAngle = Math.random() * 2 * Math.PI;
 
-  // --- useEffect de Configuración Inicial y Limpieza ---
-  useEffect(() => {
-    logger.info('Iniciando ARViewTest...');
-    logger.info(`Dispositivo móvil detectado: ${isMobile}`);
-
-    if (DEBUG && (!isMobile || MOBILE_DEBUG)) {
-      logEnvironmentInfo();
-    }
-    if (DEBUG && !isMobile) {
-      // La activación del debug de A-Frame se hará por atributos en la escena
-      // enableAFrameDebug();
-    }
-
-    // Listener de errores globales
-    const handleError = (event: ErrorEvent | PromiseRejectionEvent) => {
-        let message = 'Error desconocido';
-        let details: any = {};
-        if (event instanceof ErrorEvent) {
-            message = event.message || 'Error en script';
-            details = { error: event.error, filename: event.filename, lineno: event.lineno, colno: event.colno };
-        } else if (event instanceof PromiseRejectionEvent && event.reason) {
-            message = 'Promesa rechazada sin manejar';
-            details = { reason: event.reason };
-        } else if ((event as any).message) {
-            // Fallback genérico
-            message = (event as any).message;
-        }
-        logger.error(`Error global capturado: ${message}`, details);
-        // Podríamos mostrar un error genérico al usuario aquí si se repite mucho
-        // setError("Ocurrió un error inesperado.");
-    };
-    window.addEventListener('error', handleError);
-    window.addEventListener('unhandledrejection', handleError);
-
-    return () => {
-      logger.info('Desmontando componente ARViewTest y limpiando recursos...');
-      window.removeEventListener('error', handleError);
-      window.removeEventListener('unhandledrejection', handleError);
-      if (xhrRef.current) {
-        logger.info('Abortando XHR pendiente en cleanup.');
-        xhrRef.current.onprogress = null;
-        xhrRef.current.onload = null;
-        xhrRef.current.onerror = null;
-        xhrRef.current.ontimeout = null;
-        xhrRef.current.onabort = null;
-        xhrRef.current.abort();
-        xhrRef.current = null;
+  // Seleccionar la URL del modelo más adecuada para la situación actual
+  const selectModelUrl = () => {
+    if (modelLoadAttempts === 0) {
+      // Primera carga: usar remoto si estamos en HTTPS, local si estamos en HTTP
+      if (window.location.protocol === 'https:') {
+        logger.info('Primer intento: usando URL remota');
+        return MODEL_URLS.remote;
+      } else {
+        logger.info('Primer intento en HTTP: usando URL local');
+        return MODEL_URLS.local;
       }
-       // Limpiar Object URLs creados si aún existen y no fueron revocados
-       // Esto es complejo de rastrear, A-Frame debería manejarlo si usamos su sistema
-       // Pero si usamos setAttribute('src', blobUrl) directamente, debemos revocar
-       // if (assetItemRef.current) {
-       //     const currentSrc = assetItemRef.current.getAttribute('src');
-       //     if (currentSrc && currentSrc.startsWith('blob:')) {
-       //         logger.info(`Revocando Object URL ${currentSrc} en cleanup.`);
-       //         URL.revokeObjectURL(currentSrc);
-       //     }
-       // }
+    } else if (modelLoadAttempts === 1) {
+      // Segundo intento: usar local si el primer intento fue remoto, o backup si ya intentamos local
+      const newUrl = currentModelUrl === MODEL_URLS.remote ? MODEL_URLS.local : MODEL_URLS.backup;
+      logger.info(`Segundo intento: usando ${newUrl === MODEL_URLS.local ? 'URL local' : 'URL de backup GitHub'}`);
+      return newUrl;
+    } else if (modelLoadAttempts === 2) {
+      // Tercer intento: usar GitHub si no se ha intentado aún
+      if (!currentModelUrl.includes('github')) {
+        logger.info('Tercer intento: usando URL de backup GitHub');
+        return MODEL_URLS.backup;
+      } else {
+        logger.info('Tercer intento: usando URL de fallback simple');
+        return MODEL_URLS.fallback;
+      }
+    } else {
+      // Último recurso: modelo simplificado fallback
+      logger.info('Último intento: usando modelo simplificado');
+      return MODEL_URLS.fallback;
+    }
+  };
 
-      // Limpiar referencias de A-Frame
-      sceneElRef.current = null;
-      modelEntityRef.current = null;
-      assetItemRef.current = null;
-      logger.info('Cleanup completado.');
+  // Se ejecuta una sola vez al inicio para configurar la depuración y solicitar permisos
+  useEffect(() => {
+    logger.info('Iniciando ARViewTest - Versión con debugging extenso');
+    logger.info(`Protocolo actual: ${window.location.protocol}`);
+    logger.info(`URLs de modelos disponibles:`, MODEL_URLS);
+    logger.info(`User Agent: ${navigator.userAgent}`);
+    logger.info(`Tamaño de ventana: ${window.innerWidth}x${window.innerHeight}`);
+    
+    // Registrar información detallada del entorno
+    logEnvironmentInfo();
+    
+    // Seleccionar URL inicial
+    const initialUrl = selectModelUrl();
+    setCurrentModelUrl(initialUrl);
+    logger.info(`URL inicial seleccionada: ${initialUrl}`);
+    
+    // Configurar depuración de A-Frame de forma segura
+    if (DEBUG) {
+      enableAFrameDebug();
+    }
+
+    // Registrar los errores en consola
+    window.addEventListener('error', (event) => {
+      logger.error('Error global capturado:', event.message, {
+        error: event.error,
+        filename: event.filename,
+        lineno: event.lineno,
+        colno: event.colno,
+        timestamp: new Date().toISOString(),
+      });
+    });
+    
+    // También capturar promesas rechazadas
+    window.addEventListener('unhandledrejection', (event) => {
+      logger.error('Promesa rechazada sin manejar:', {
+        reason: event.reason,
+        timestamp: new Date().toISOString(),
+      });
+    });
+    
+    // Manejar errores de carga del modelo
+    document.addEventListener('model-error', (event) => {
+      logger.error('Evento model-error disparado', event);
+      // No establecer error inmediatamente para permitir reintentos
+      setLoadingErrors(prev => [...prev, 'Error al cargar el modelo 3D']);
+    });
+
+    // Monitorear la carga de la escena A-Frame
+    document.addEventListener('loaded', () => {
+      logger.info('Escena A-Frame cargada completamente');
+    });
+    
+    // También escuchar eventos específicos de A-Frame
+    ['loaded', 'renderstart', 'renderstop', 'enter-vr', 'exit-vr', 'camera-ready'].forEach(eventName => {
+      document.addEventListener(eventName, () => {
+        logger.info(`Evento A-Frame capturado: ${eventName}`);
+      });
+    });
+
+    // Limpiar listeners al desmontar
+    return () => {
+      logger.info('Desmontando componente ARViewTest');
+      document.removeEventListener('model-error', () => {});
+      document.removeEventListener('loaded', () => {});
+      window.removeEventListener('error', () => {});
+      window.removeEventListener('unhandledrejection', () => {});
+      ['loaded', 'renderstart', 'renderstop', 'enter-vr', 'exit-vr', 'camera-ready'].forEach(eventName => {
+        document.removeEventListener(eventName, () => {});
+      });
     };
-  }, []); // Vacío para ejecutar solo una vez al montar
+  }, []);
 
-  // --- useEffect para solicitar cámara ---
+  // Manejo de cámara y permiso de video
   useEffect(() => {
     logger.info('Solicitando acceso a la cámara...');
-    navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: 'environment',
+    
+    // Solicitar acceso a la cámara explícitamente antes de inicializar AR.js
+    navigator.mediaDevices.getUserMedia({ 
+      video: { 
+        facingMode: 'environment', 
         width: { ideal: 1280 },
         height: { ideal: 720 }
       },
-      audio: false
+      audio: false 
     })
       .then((stream) => {
-        logger.info('Acceso a la cámara concedido.', stream.getVideoTracks()[0]?.label);
+        logger.info('Acceso a la cámara concedido', stream.getVideoTracks()[0].label);
         setCameraActive(true);
+        
+        // Imprimir capacidades de la cámara
         const videoTrack = stream.getVideoTracks()[0];
-        if (videoTrack?.getCapabilities) {
-           logger.info('Capacidades de la cámara:', videoTrack.getCapabilities());
-        }
-        // Pequeño retraso para asegurar que la cámara esté lista antes de renderizar A-Frame
+        logger.info('Capacidades de la cámara:', videoTrack.getCapabilities());
+        
+        // Pequeño retraso para asegurar que la cámara esté lista
         setTimeout(() => {
-          logger.info('Iniciando renderizado de escena AR.');
-          setArReady(true); // Esto disparará el renderizado de la escena base
-        }, 500); // Reducido el delay
+          logger.info('Iniciando escena AR después de delay');
+          setArReady(true);
+        }, 1000);
       })
       .catch(err => {
         logger.error('Error al acceder a la cámara', err);
         setError(`Error al acceder a la cámara: ${err instanceof Error ? err.message : String(err)}`);
-        setCameraActive(false); // Marcar cámara como inactiva
-        setArReady(false); // Asegurar que AR no se active
       });
   }, []);
 
-  // --- Función de Carga (XHR + Preparación Blob) ---
+  // Función para cargar el modelo con manejo avanzado de errores y reintentos
   const loadModel = (url: string) => {
-    logger.info(`Intentando descargar modelo desde: ${url} (Intento global: ${globalAttempts + 1} / ${MODEL_LOAD_CONFIG.maxGlobalAttempts})`);
-
-    // --- Verificación de intentos globales ANTES de incrementar ---
-    if (globalAttempts >= MODEL_LOAD_CONFIG.maxGlobalAttempts) {
-      logger.error(`EXCEDIDO MÁXIMO GLOBAL DE INTENTOS (${MODEL_LOAD_CONFIG.maxGlobalAttempts}). Deteniendo carga.`);
-      setError(`Error crítico: Demasiados intentos fallidos (${globalAttempts}). Por favor, reinicia la aplicación.`);
-      setModelLoading(false); // Detener indicador de carga
-      return;
-    }
-    // --- Incrementar contador global ---
-    setGlobalAttempts(prev => prev + 1);
-
-    // --- Incrementar contador de intentos de la ronda actual ---
-    // OJO: modelLoadAttempts se resetea a 0 en el useEffect inicial y antes del último intento
-    setModelLoadAttempts(prev => prev + 1);
-
-    setModelLoading(true); // Iniciar estado de carga
+    logger.info(`Iniciando carga del modelo desde: ${url}`, { 
+      intento: modelLoadAttempts + 1,
+      timestamp: new Date().toISOString(),
+      navegador: navigator.userAgent.split(' ').slice(-1)[0]
+    });
+    
+    setModelLoading(true);
     setLoadingProgress(0);
-    setLoadingErrors(prev => prev.filter(e => !e.includes('HTTP') && !e.includes('descarga'))); // Limpiar errores de carga previos
-
-    // Abortar XHR previo si existe
+    
+    // Limpiar cualquier request previa
     if (xhrRef.current) {
-      logger.info('Abortando solicitud XHR previa.');
-      xhrRef.current.onprogress = null;
-      xhrRef.current.onload = null;
-      xhrRef.current.onerror = null;
-      xhrRef.current.ontimeout = null;
-      xhrRef.current.onabort = null;
+      logger.info('Abortando solicitud previa');
       xhrRef.current.abort();
     }
-
-    // --- Crear nueva solicitud XHR ---
+    
+    // Crear nueva solicitud XHR
     const xhr = new XMLHttpRequest();
     xhrRef.current = xhr;
-
+    
     xhr.open('GET', url, true);
     xhr.responseType = 'arraybuffer';
-
+    
+    // Variable para controlar la limitación de actualizaciones de progreso
     let lastProgressUpdate = 0;
-
+    
+    xhr.onloadstart = () => {
+      logger.info(`Iniciando descarga del modelo desde ${url}`, {
+        hora: new Date().toTimeString().split(' ')[0],
+        hostname: new URL(url.startsWith('/') ? window.location.origin + url : url).hostname
+      });
+      setModelLoadAttempts(prev => prev + 1);
+    };
+    
     xhr.onprogress = (event) => {
       const now = Date.now();
+      
+      // Limitar las actualizaciones de progreso para evitar sobrecarga de renderización
       if (now - lastProgressUpdate < MODEL_LOAD_CONFIG.progressThrottleMs) {
-        return; // Limitar actualizaciones
+        return;
       }
+      
       lastProgressUpdate = now;
-
-      if (event.lengthComputable && event.total > 0) {
+      
+      if (event.lengthComputable) {
         const percentComplete = Math.round((event.loaded / event.total) * 100);
-        setLoadingProgress(percentComplete);
-        if (percentComplete % (isMobile ? 25 : 10) === 0 || percentComplete === 100 || percentComplete === 0) {
-             logger.info(`Progreso de carga: ${percentComplete}% (${formatBytes(event.loaded)} / ${formatBytes(event.total)})`);
+        
+        // Solo registrar en la consola cada 10% o en 0%, 100%
+        if (percentComplete % 10 === 0 || percentComplete === 100) {
+          logger.info(`Progreso de carga: ${percentComplete}%`, {
+            loaded: formatBytes(event.loaded),
+            total: formatBytes(event.total),
+            url: url.split('/').pop()
+          });
         }
-        // Detección temprana de tamaño sospechoso
+        
+        setLoadingProgress(percentComplete);
+        
+        // Detección temprana de posibles problemas
         if (event.loaded > 0 && event.total < MODEL_LOAD_CONFIG.minValidSizeBytes) {
-          logger.warn('Tamaño total del modelo < minValidSizeBytes', { total: event.total, url });
+          logger.warn('El tamaño total del modelo parece sospechosamente pequeño', {
+            total: event.total, 
+            url
+          });
         }
       } else {
-        // Simular progreso si no es computable (menos fiable)
-        const estimatedProgress = Math.min(99, Math.log(event.loaded + 1) / Math.log(5000000) * 100); // Ajustar base log si es necesario
+        // Para URLs sin tamaño computable, simular progreso basado en bytes recibidos
+        const estimatedProgress = Math.min(99, Math.log(event.loaded + 1) / Math.log(10000000) * 100);
+        logger.info(`Progreso estimado (no computable): ${Math.round(estimatedProgress)}%`, {
+          loaded: formatBytes(event.loaded),
+          url: url.split('/').pop()
+        });
         setLoadingProgress(Math.round(estimatedProgress));
-         logger.info(`Progreso de carga: ~${Math.round(estimatedProgress)}% (${formatBytes(event.loaded)} / ?)`);
       }
     };
-
+    
     xhr.onload = () => {
-      if (!xhrRef.current || xhr !== xhrRef.current) {
-         logger.warn('XHR onload ejecutado pero la referencia ha cambiado (probablemente abortado). Ignorando.');
-         return;
-      }
-
       if (xhr.status >= 200 && xhr.status < 300) {
-        logger.info('Modelo descargado completamente por XHR.', {
+        logger.info('Modelo cargado completamente', { 
           status: xhr.status,
-          size: formatBytes(xhr.response?.byteLength),
+          response_size: formatBytes(xhr.response.byteLength),
           contentType: xhr.getResponseHeader('Content-Type'),
           url
         });
-
-        const responseData = xhr.response;
-        // Liberar referencia XHR aquí para permitir GC temprano
-        xhrRef.current = null;
-
-        // --- Validaciones del contenido descargado ---
-        if (!responseData || responseData.byteLength < MODEL_LOAD_CONFIG.minValidSizeBytes) {
-          logger.error('Respuesta inválida o demasiado pequeña.', { 
-              size: responseData?.byteLength, 
-              expectedMin: MODEL_LOAD_CONFIG.minValidSizeBytes 
+        
+        // Validaciones adicionales del modelo descargado
+        if (xhr.response.byteLength < MODEL_LOAD_CONFIG.minValidSizeBytes) {
+          logger.warn('El modelo cargado parece demasiado pequeño, podría estar corrupto', {
+            size: xhr.response.byteLength,
+            expectedMinSize: MODEL_LOAD_CONFIG.minValidSizeBytes
           });
-          // Loguear inicio de la respuesta para depuración
-          try {
-            const firstChars = new TextDecoder().decode(responseData.slice(0, 100));
-            logger.warn(`Inicio de la respuesta recibida (puede ser HTML): ${firstChars}...`);
-          } catch {}
-          setLoadingErrors(prev => [...prev, `Modelo inválido/corrupto (${formatBytes(responseData?.byteLength)})`]);
-          retry(); // Intentar siguiente URL
-          return;
-        }
-
-        // Verificar si es HTML (error común de servidor)
-        const firstBytes = new Uint8Array(responseData, 0, Math.min(20, responseData.byteLength));
-        const firstChars = Array.from(firstBytes).map(b => String.fromCharCode(b)).join('');
-        if (firstChars.includes('<html') || firstChars.includes('<!DOCTYPE')) {
-          logger.error('Recibido HTML en lugar de GLB. Posible error 404 o de servidor.', { head: firstChars });
-          setLoadingErrors(prev => [...prev, `Error servidor (recibido HTML)`]);
+          
+          // Verificar si es un mensaje de error HTML en lugar de un GLB
+          const firstBytes = new Uint8Array(xhr.response, 0, Math.min(20, xhr.response.byteLength));
+          const probablyHTML = firstBytes.indexOf(60) !== -1; // 60 es '<' en ASCII
+          
+          if (probablyHTML) {
+            logger.error('Recibido HTML en lugar de GLB. Posible error de servidor.', {
+              firstBytes: Array.from(firstBytes).map(b => String.fromCharCode(b)).join('')
+            });
+            setLoadingErrors(prev => [...prev, `Recibido HTML en lugar de GLB (${url.split('/').pop()})`]);
+          } else {
+            setLoadingErrors(prev => [...prev, `Modelo posiblemente corrupto (${formatBytes(xhr.response.byteLength)})`]);
+          }
+          
           retry();
           return;
         }
-
-        // Verificar magic bytes 'glTF'
-        const header = new Uint8Array(responseData, 0, 4);
+        
+        // Verificar formato GLB (GLB comienza con magia 'glTF')
+        const header = new Uint8Array(xhr.response, 0, 4);
         const magicString = String.fromCharCode.apply(null, Array.from(header));
+        
         if (magicString !== 'glTF') {
-          logger.error('El archivo descargado no parece ser un GLB válido (magic bytes incorrectos).', { magic: magicString });
+          logger.error('El archivo no parece ser un GLB válido', { 
+            magic: magicString,
+            headerBytes: Array.from(header)
+          });
           setLoadingErrors(prev => [...prev, `Formato de archivo no válido (${magicString})`]);
           retry();
           return;
         }
-
-        // --- ÉXITO de XHR y Validaciones ---
-        logger.info('Datos del modelo descargados y validados. Creando Blob URL...');
-
-        try {
-          const blob = new Blob([responseData], { type: 'model/gltf-binary' });
-          const objectURL = URL.createObjectURL(blob);
-          logger.info(`Blob URL creado: ${objectURL.substring(0, 50)}...`);
-
-          // --- Actualizar A-Frame ---
-          if (assetItemRef.current) {
-            const oldSrc = assetItemRef.current.getAttribute('src');
-            logger.info(`Actualizando src de a-asset-item (${assetItemRef.current.id}) a nuevo Blob URL.`);
-            assetItemRef.current.setAttribute('src', objectURL);
-
-            // Revocar URL anterior si era un Blob URL
-             if (oldSrc && oldSrc.startsWith('blob:')) {
-                 logger.info(`Revocando Object URL anterior: ${oldSrc.substring(0,50)}...`);
-                 URL.revokeObjectURL(oldSrc);
-             }
-
-             // A-Frame debería detectar el cambio en src y cargar el modelo
-             // El listener 'model-loaded' en la entidad se encargará de la visibilidad
-             // y de quitar el indicador de carga general.
-             // setModelLoading(false); // Quitamos esto, 'model-loaded' lo hará
-             setLoadingProgress(100); // Marcar progreso como 100%
-             logger.info("Esperando evento 'model-loaded' desde A-Frame...");
-
-
-          } else {
-            logger.error('Referencia a a-asset-item no encontrada. No se puede cargar modelo.');
-            setError('Error interno: No se pudo encontrar el componente de assets.');
-            setModelLoading(false);
-             URL.revokeObjectURL(objectURL); // Revocar si no se pudo usar
+        
+        // Todo parece correcto, marcar como cargado
+        setModelLoading(false);
+        setLoadingProgress(100);
+        
+        // Actualizar el elemento 3D en la escena
+        setTimeout(() => {
+          try {
+            const modelEntity = document.querySelector('#castillo-model');
+            const progressIndicator = document.querySelector('#progress-indicator');
+            
+            if (modelEntity) {
+              logger.info('Activando visibilidad del modelo 3D');
+              modelEntity.setAttribute('visible', 'true');
+              
+              // Registrar evento para detectar errores de renderizado
+              modelEntity.addEventListener('model-error', (event) => {
+                logger.error('Error en renderizado del modelo', event);
+              });
+            }
+            
+            if (progressIndicator) {
+              logger.info('Ocultando indicador de progreso');
+              progressIndicator.setAttribute('visible', 'false');
+            }
+          } catch (e) {
+            logger.error('Error al actualizar elementos en la escena', e);
           }
-
-        } catch (blobError) {
-          logger.error('Error al crear Blob o Object URL', blobError);
-          setLoadingErrors(prev => [...prev, 'Error interno procesando modelo']);
-          retry();
-        }
-
+        }, 500);
       } else {
-        // --- Error HTTP ---
-        logger.error(`Error HTTP ${xhr.status} al descargar ${url}`, { statusText: xhr.statusText });
-        setLoadingErrors(prev => [...prev, `Error HTTP ${xhr.status}`]);
-        xhrRef.current = null; // Limpiar ref
+        logger.error(`Error HTTP ${xhr.status} al cargar el modelo`, { 
+          url,
+          statusText: xhr.statusText,
+          response: xhr.responseText?.substring(0, 200) || 'No disponible'
+        });
+        setLoadingErrors(prev => [...prev, `Error HTTP ${xhr.status} (${xhr.statusText})`]);
         retry();
       }
     };
-
-    xhr.onerror = () => {
-      if (!xhrRef.current || xhr !== xhrRef.current) {
-         logger.warn('XHR onerror ejecutado pero la referencia ha cambiado. Ignorando.');
-         return;
+    
+    xhr.onerror = (e) => {
+      logger.error('Error al cargar el modelo', e, {
+        type: 'network_error',
+        url,
+        protocol: window.location.protocol,
+        hostname: new URL(url.startsWith('/') ? window.location.origin + url : url).hostname
+      });
+      
+      // Análisis detallado del error de red
+      let errorDetail = 'Error de red desconocido';
+      
+      if (navigator.onLine === false) {
+        errorDetail = 'Dispositivo sin conexión a internet';
+      } else if (url.startsWith('https:') && window.location.protocol === 'http:') {
+        errorDetail = 'Error de mezcla HTTP/HTTPS';
+      } else if (url.includes('githubusercontent') && navigator.userAgent.includes('iPhone')) {
+        errorDetail = 'Posible bloqueo en Safari iOS';
       }
-      logger.error(`Error de red al intentar descargar ${url}`, { url });
-      let errorDetail = 'Error de red';
-      if (navigator.onLine === false) errorDetail = 'Sin conexión';
-      else if (url.startsWith('https') && window.location.protocol === 'http:') errorDetail = 'Mezcla HTTP/HTTPS';
-      setLoadingErrors(prev => [...prev, errorDetail]);
-       xhrRef.current = null; // Limpiar ref
+      
+      setLoadingErrors(prev => [...prev, `Error de red: ${errorDetail}`]);
       retry();
     };
-
+    
     xhr.ontimeout = () => {
-       if (!xhrRef.current || xhr !== xhrRef.current) {
-         logger.warn('XHR ontimeout ejecutado pero la referencia ha cambiado. Ignorando.');
-         return;
-      }
-      logger.error(`Timeout (${MODEL_LOAD_CONFIG.timeoutMs}ms) al descargar ${url}`);
-      setLoadingErrors(prev => [...prev, `Timeout (${MODEL_LOAD_CONFIG.timeoutMs/1000}s)`]);
-       xhrRef.current = null; // Limpiar ref
+      logger.error('Timeout al cargar el modelo', {
+        url,
+        timeoutMs: MODEL_LOAD_CONFIG.timeoutMs
+      });
+      setLoadingErrors(prev => [...prev, `Timeout después de ${MODEL_LOAD_CONFIG.timeoutMs/1000}s`]);
       retry();
     };
-
-     xhr.onabort = () => {
-        // No llamar a retry si fue abortado intencionalmente
-        logger.warn(`Descarga XHR abortada para ${url}.`);
-         if (xhrRef.current === xhr) { // Solo limpiar si es el XHR actual
-            xhrRef.current = null;
-         }
+    
+    xhr.onabort = () => {
+      logger.warn('Carga del modelo abortada', { url });
     };
-
-    // --- Enviar solicitud ---
+    
+    // Establecer timeout para la carga
+    xhr.timeout = MODEL_LOAD_CONFIG.timeoutMs;
+    
     try {
-      xhr.timeout = MODEL_LOAD_CONFIG.timeoutMs;
       xhr.send();
-      logger.info(`Solicitud XHR enviada para ${url}`);
+      logger.info('Solicitud enviada para cargar el modelo', { 
+        url,
+        method: 'GET',
+        responseType: xhr.responseType
+      });
     } catch (e) {
-      logger.error('Error al enviar la solicitud XHR', e, { url });
-      setLoadingErrors(prev => [...prev, `Error al iniciar descarga: ${e instanceof Error ? e.message : String(e)}`]);
-      xhrRef.current = null; // Limpiar ref
-      retry(); // Llama a retry si send() falla
+      logger.error('Error al enviar la solicitud', e, {
+        url,
+        browserInfo: navigator.userAgent
+      });
+      setLoadingErrors(prev => [...prev, `Error al iniciar la descarga: ${e instanceof Error ? e.message : String(e)}`]);
+      retry();
     }
   };
 
-  // --- Función Retry ---
+  // Función para reintentar con otra URL
   const retry = () => {
-    // Usar una pequeña demora para permitir que el estado se actualice y evitar ciclos rápidos
+    if (modelLoadAttempts >= MODEL_LOAD_CONFIG.maxAttempts) {
+      logger.error('Se alcanzó el máximo de intentos de carga del modelo', {
+        intentos: modelLoadAttempts,
+        errores: loadingErrors
+      });
+      
+      // Mostrar mensaje de error detallado
+      setError(`No se pudo cargar el modelo 3D después de ${modelLoadAttempts} intentos. 
+               ${loadingErrors.length > 0 ? `Errores: ${loadingErrors.slice(-3).join(', ')}` : ''}`);
+      
+      // Si todo falla, tratar de mostrar por lo menos el modelo más simple
+      if (!currentModelUrl.includes('simplified') && currentModelUrl !== MODEL_URLS.fallback) {
+        logger.info('Intentando última opción: modelo ultra simplificado');
+        
+        // Restablecer estado para este último intento
+        setError(null);
+        setLoadingErrors([]);
+        setModelLoadAttempts(0);
+        setCurrentModelUrl(MODEL_URLS.simplified);
+        
+        setTimeout(() => {
+          try {
+            loadModel(MODEL_URLS.simplified);
+          } catch (e) {
+            logger.error('Error en último intento con modelo simplificado', e);
+            setError('No se pudo cargar ningún modelo 3D. Por favor, inténtalo más tarde.');
+          }
+        }, MODEL_LOAD_CONFIG.retryDelayMs);
+      }
+      
+      return;
+    }
+    
+    logger.info('Reintentando carga con otra URL', {
+      intentoActual: modelLoadAttempts,
+      maxIntentos: MODEL_LOAD_CONFIG.maxAttempts
+    });
+    
+    const nextUrl = selectModelUrl();
+    logger.info(`Seleccionada siguiente URL: ${nextUrl}`);
+    setCurrentModelUrl(nextUrl);
+    
+    // Retraso antes de reintentar
     setTimeout(() => {
-        logger.warn(`RETRY llamado. Intento actual de ronda: ${modelLoadAttempts}, Global: ${globalAttempts}`);
-
-        // --- Verificación de seguridad global ---
-        if (globalAttempts >= MODEL_LOAD_CONFIG.maxGlobalAttempts) {
-          logger.error(`EXCEDIDO MÁXIMO GLOBAL DE INTENTOS (${globalAttempts}/${MODEL_LOAD_CONFIG.maxGlobalAttempts}) en retry. Cancelando.`);
-          setError(`Error crítico: Demasiados intentos fallidos (${globalAttempts}). Por favor, reinicia.`);
-          setModelLoading(false);
-          return;
-        }
-
-        // --- Verificación de intento final ---
-        if (isLastAttempt) {
-          logger.error('El último intento (modelo simplificado) también falló. No hay más reintentos.');
-          setError(`No se pudo cargar ningún modelo después de ${globalAttempts} intentos. Errores: ${loadingErrors.slice(-3).join(', ')}`);
-          setModelLoading(false);
-          return;
-        }
-
-        // --- Verificar si hemos alcanzado el máximo de intentos para la ronda actual ---
-        if (modelLoadAttempts >= MODEL_LOAD_CONFIG.maxAttempts) {
-          logger.error(`Se alcanzó el máximo de ${MODEL_LOAD_CONFIG.maxAttempts} intentos para esta ronda. Intentando modelo simplificado.`);
-
-          setIsLastAttempt(true); // Marcar como último intento
-          setError(null); // Limpiar error principal para mostrar carga del último intento
-          setLoadingProgress(0); // Resetear progreso para el último intento
-
-          const finalUrl = MODEL_URLS.simplified || MODEL_URLS.fallback;
-          setCurrentModelUrl(finalUrl); // Esto dispara el useEffect[currentModelUrl] que llama a loadModel
-
-          // Resetear contador de intentos de ronda SOLO para este intento final
-          setModelLoadAttempts(0);
-          logger.info(`Iniciando último intento con URL: ${finalUrl}`);
-          // NO llamamos a loadModel directamente aquí, el cambio de state lo hará.
-
-          return; // Salir de retry después de configurar el último intento
-        }
-
-        // --- Si no hemos llegado al límite de la ronda, proceder con el siguiente intento ---
-        logger.info(`Preparando siguiente intento (Intento de ronda ${modelLoadAttempts + 1}/${MODEL_LOAD_CONFIG.maxAttempts})`);
-        setLoadingProgress(0); // <-- Resetear progreso ANTES del siguiente intento
-
-        const nextUrl = selectModelUrl(modelLoadAttempts); // Obtener URL para el *siguiente* intento
-        logger.info(`Siguiente URL seleccionada: ${nextUrl}`);
-        setCurrentModelUrl(nextUrl); // Actualizar estado -> dispara useEffect[currentModelUrl] -> llama a loadModel
-         // modelLoadAttempts se incrementará dentro del próximo loadModel
-
-    }, MODEL_LOAD_CONFIG.retryDelayMs); // Aplicar retraso antes de decidir el reintento
+      loadModel(nextUrl);
+    }, MODEL_LOAD_CONFIG.retryDelayMs);
   };
 
-  // --- useEffect para iniciar la carga cuando AR está listo y la URL es nula ---
+  // Manejador de carga del modelo - inicia el proceso y maneja cambios de URL
   useEffect(() => {
-    // Solo si AR está listo, la carga inicial NO se ha disparado, y NO hay URL actual
-    if (arReady && !initialLoadTriggered.current && currentModelUrl === null) {
-      logger.info('AR listo y sin URL. Iniciando secuencia de carga inicial.');
-      initialLoadTriggered.current = true;
-
-      // Reiniciar contadores y estado para la primera secuencia
-      setGlobalAttempts(0);
-      setModelLoadAttempts(0);
-      setIsLastAttempt(false);
-      setLoadingErrors([]);
-      setError(null);
-
-      // Obtener la primera URL a intentar (intento 0)
-      const firstUrl = selectModelUrl(0);
-      logger.info(`URL inicial seleccionada: ${firstUrl}`);
-      setCurrentModelUrl(firstUrl); // -> Dispara useEffect[currentModelUrl] -> loadModel
+    if (!arReady) {
+      logger.info('AR no está listo todavía, esperando para cargar el modelo...');
+      return;
     }
-  }, [arReady, currentModelUrl]); // Dependencias: arReady y currentModelUrl
-
-  // --- useEffect para llamar a loadModel cuando cambia currentModelUrl ---
-  useEffect(() => {
-    // Solo si hay una URL válida y AR está listo
-    if (currentModelUrl && arReady) {
-      logger.info(`useEffect[currentModelUrl]: URL cambió a ${currentModelUrl}. Llamando a loadModel.`);
+    
+    if (currentModelUrl && modelLoadAttempts === 0) {
       loadModel(currentModelUrl);
     }
-    // No necesita cleanup aquí, loadModel aborta XHR previo.
-    // La revocación de Blob URL se maneja al cargar uno nuevo.
-  }, [currentModelUrl, arReady]); // Ejecutar cuando la URL o arReady cambien
+    
+    return () => {
+      if (xhrRef.current) {
+        logger.info('Abortando carga del modelo (cleanup)');
+        xhrRef.current.abort();
+        xhrRef.current = null;
+      }
+    };
+  }, [arReady, currentModelUrl]);
 
-  // --- useEffect para adjuntar referencias y listeners a A-Frame ---
+  // Manejo de geolocalización (solo cuando arReady es true)
   useEffect(() => {
-    if (arReady && sceneContainerRef.current && !sceneElRef.current) {
-      logger.info('Contenedor de escena AR renderizado. Buscando elementos A-Frame...');
+    if (!arReady) return;
 
-      // Usar un pequeño timeout puede ayudar si A-Frame necesita un ciclo
-      const timerId = setTimeout(() => {
-        if (!sceneContainerRef.current) return; // Comprobar si el contenedor aún existe
-
-        const sceneElement = sceneContainerRef.current.querySelector('a-scene');
-        if (sceneElement) {
-          sceneElRef.current = sceneElement;
-          logger.info('<a-scene> encontrada y referencia guardada.');
-
-          assetItemRef.current = sceneElement.querySelector('#castillo-asset');
-          modelEntityRef.current = sceneElement.querySelector('#castillo-model');
-
-          if (!assetItemRef.current) logger.error('¡Error crítico! No se pudo encontrar #castillo-asset.');
-          else logger.info('Referencia a #castillo-asset guardada.');
-
-          if (!modelEntityRef.current) logger.error('¡Error crítico! No se pudo encontrar #castillo-model.');
-          else {
-            logger.info('Referencia a #castillo-model guardada. Adjuntando listeners...');
-
-            // --- Listener para model-error ---
-            const handleModelError = (event: Event) => {
-                const detail = (event as CustomEvent)?.detail;
-                const src = detail?.src || modelEntityRef.current?.getAttribute('gltf-model') || assetItemRef.current?.getAttribute('src') || 'desconocido';
-                logger.error(`Evento 'model-error' capturado en #castillo-model`, { detail, src });
-                setLoadingErrors(prev => [...prev, `Error A-Frame (${src.substring(0,30)}...)`]);
-
-                // Llamar a retry SOLO si no estamos ya en el último intento y si el error NO viene de un blob
-                // Errores en blob suelen ser irrecuperables (datos corruptos)
-                if (!isLastAttempt && !src.startsWith('blob:')) {
-                    logger.warn("Llamando a retry() desde listener 'model-error' (posible error de red/A-Frame).");
-                    retry();
-                } else if (src.startsWith('blob:')) {
-                    logger.error("'model-error' ocurrió con un Blob URL. No se reintentará. Probablemente datos corruptos.");
-                    setError('Error al procesar el modelo 3D descargado.');
-                    setModelLoading(false);
+    logger.info('Configurando geolocalización');
+    
+    if ('geolocation' in navigator) {
+      // Usar una sola llamada inicial para evitar warning de gesture
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude, accuracy } = position.coords;
+          logger.info('Posición inicial obtenida', { latitude, longitude, accuracy });
+          
+          // Posicionar el modelo a una distancia fija, en una dirección aleatoria
+          const dx = testDistance * Math.sin(randomAngle);
+          const dz = testDistance * Math.cos(randomAngle);
+          logger.info('Posición calculada para el modelo', { dx, dz, distancia: testDistance, angulo: randomAngle });
+          
+          // Iniciar el watchPosition después de tener la posición inicial
+          const watchId = navigator.geolocation.watchPosition(
+            (position) => {
+              const { latitude, longitude, accuracy } = position.coords;
+              logger.info('Actualización de posición', { latitude, longitude, accuracy });
+              
+              // Actualizar la posición del modelo dinámicamente usando el sistema de eventos de A-Frame
+              setTimeout(() => {
+                const modelEl = document.querySelector('#castillo-model');
+                if (modelEl) {
+                  logger.info('Actualizando posición del modelo', { dx, dz });
+                  modelEl.setAttribute('position', `${dx} 0 ${dz}`);
                 } else {
-                     logger.error("'model-error' ocurrió en el último intento. No se reintentará.");
-                     setError('Fallo final al cargar/renderizar el modelo 3D.');
-                     setModelLoading(false);
+                  logger.warn('Elemento del modelo no encontrado para actualizar posición');
                 }
-            };
-
-            // --- Listener para model-loaded ---
-             const handleModelLoaded = () => {
-                logger.info("Evento 'model-loaded' capturado en #castillo-model. Modelo renderizado.");
-                if (modelEntityRef.current) {
-                    modelEntityRef.current.setAttribute('visible', 'true');
-                }
-                 // Asegurarse de quitar el indicador de carga general
-                 // Usar timeout para evitar flicker si 'model-loaded' dispara muy rápido
-                setTimeout(() => setModelLoading(false), 100);
-                setLoadingProgress(100); // Asegurar 100%
-            };
-
-            // Adjuntar listeners
-            modelEntityRef.current.addEventListener('model-error', handleModelError);
-            modelEntityRef.current.addEventListener('model-loaded', handleModelLoaded);
-
-            // Guardar funciones para poder removerlas en cleanup
-            modelEntityRef.current._handleModelError = handleModelError;
-            modelEntityRef.current._handleModelLoaded = handleModelLoaded;
-
-          } // end if modelEntityRef.current
-
-        } else {
-          logger.error('No se pudo encontrar <a-scene> dentro del contenedor después del delay.');
+              }, 1000);
+            },
+            (err) => {
+              logger.error('Error accediendo a la ubicación', err);
+              setError(`Error accediendo a la ubicación: ${err.message}`);
+            },
+            { 
+              enableHighAccuracy: true,
+              maximumAge: 1000,
+              timeout: 60000
+            }
+          );
+          
+          return () => {
+            logger.info('Limpiando watch position');
+            navigator.geolocation.clearWatch(watchId);
+          };
+        },
+        (err) => {
+          logger.error('Error accediendo a la ubicación inicial', err);
+          setError(`Error accediendo a la ubicación: ${err.message}`);
+        },
+        { 
+          enableHighAccuracy: true,
+          timeout: 60000
         }
-      }, 150); // Aumentar delay ligeramente si es necesario
+      );
+    } else {
+      logger.error('Geolocalización no disponible');
+      setError('La geolocalización no está disponible en este dispositivo.');
+    }
+  }, [arReady, randomAngle, testDistance]);
 
-      // Cleanup para este efecto: remover listeners si se desmonta ANTES de que se añadan o si arReady cambia a false
-       return () => {
-           clearTimeout(timerId);
-           if (modelEntityRef.current) {
-               if (modelEntityRef.current._handleModelError) {
-                  logger.info("Removiendo listener 'model-error' de #castillo-model.");
-                  modelEntityRef.current.removeEventListener('model-error', modelEntityRef.current._handleModelError);
-               }
-               if (modelEntityRef.current._handleModelLoaded) {
-                  logger.info("Removiendo listener 'model-loaded' de #castillo-model.");
-                  modelEntityRef.current.removeEventListener('model-loaded', modelEntityRef.current._handleModelLoaded);
-               }
-           }
-       };
+  // Actualizar el progreso de carga en la escena
+  useEffect(() => {
+    if (!arReady) return;
+    
+    logger.info('Actualizando indicadores de progreso en DOM', { progreso: loadingProgress });
+    
+    const progressBar = document.querySelector('#progress-bar');
+    const progressText = document.querySelector('#progress-text');
+    const progressIndicator = document.querySelector('#progress-indicator');
+    const placeholderModel = document.querySelector('#placeholder-model');
+    const castilloModel = document.querySelector('#castillo-model');
+    
+    if (progressBar && progressText) {
+      progressBar.setAttribute('scale', `${loadingProgress/100} 1 1`);
+      progressText.setAttribute('value', `${loadingProgress}%`);
+      logger.info('Elementos de progreso actualizados');
+    } else {
+      logger.warn('No se encontraron elementos de progreso en el DOM');
+    }
+    
+    if (loadingProgress === 100 && progressIndicator) {
+      logger.info('Carga completa, mostrando modelo');
+      setTimeout(() => {
+        if (progressIndicator) {
+          progressIndicator.setAttribute('visible', 'false');
+          logger.info('Indicador de progreso ocultado');
+        }
+        
+        if (placeholderModel && castilloModel) {
+          logger.info('Activando modelo real y desvaneciendo placeholder');
+          placeholderModel.dispatchEvent(new CustomEvent('modelLoaded'));
+          castilloModel.setAttribute('visible', 'true');
+        } else {
+          logger.warn('No se encontraron elementos del modelo o placeholder');
+        }
+      }, 1000);
+    }
+  }, [loadingProgress, arReady]);
 
-    } // end if arReady && sceneContainerRef.current && !sceneElRef.current
-  }, [arReady]); // Ejecutar cuando arReady cambie
+  // Monitorear estado del sistema cada 5 segundos
+  useEffect(() => {
+    if (!arReady) return;
+    
+    const intervalId = setInterval(() => {
+      const memory = (window as any).performance?.memory;
+      
+      logger.info('Estado del sistema', {
+        timestamp: new Date().toISOString(),
+        memory: memory ? {
+          jsHeapSizeLimit: formatBytes(memory.jsHeapSizeLimit),
+          totalJSHeapSize: formatBytes(memory.totalJSHeapSize),
+          usedJSHeapSize: formatBytes(memory.usedJSHeapSize)
+        } : 'No disponible',
+        arReady,
+        modelLoading,
+        loadingProgress,
+        cameraActive,
+        modelLoadAttempts
+      });
+      
+      // Verificar si hay elementos clave en la escena
+      const sceneEl = document.querySelector('a-scene');
+      const cameraEl = document.querySelector('a-camera');
+      const modelEl = document.querySelector('#castillo-model');
+      
+      logger.info('Estado de elementos DOM', {
+        'a-scene': !!sceneEl,
+        'a-camera': !!cameraEl,
+        'castillo-model': !!modelEl,
+        'scene class': sceneEl?.classList.toString(),
+        'camera position': cameraEl?.getAttribute('position'),
+        'model position': modelEl?.getAttribute('position'),
+        'model visible': modelEl?.getAttribute('visible')
+      });
+      
+    }, 5000);
+    
+    return () => clearInterval(intervalId);
+  }, [arReady, modelLoading, loadingProgress, cameraActive, modelLoadAttempts]);
 
-  // --- Contenido HTML Estático para A-Frame ---
-  const getStaticAframeHTML = () => {
-    logger.info('Generando HTML estático de A-Frame...');
-    const debugConfig = DEBUG && !isMobile ? `stats="${DEBUG}" debug="true"` : ''; // debug-helper no necesario si no lo usamos
+  // Utilidad para formatear bytes en forma legible
+  const formatBytes = (bytes: number, decimals = 2) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+  };
 
-    // Nota: Quitamos src y gltf-model iniciales.
-    // Añadimos el listener de progreso directamente al asset-item
+  // Contenido A-Frame como HTML con optimizaciones de rendimiento y depuración
+  const getAframeHTML = () => {
+    logger.info(`Generando HTML A-Frame con URL: ${currentModelUrl}`, { intento: modelLoadAttempts });
+    
+    // Configurar parámetros de depuración para A-Frame
+    const debugConfig = DEBUG ? 
+      `stats="${DEBUG}" 
+       debug="true"
+       debug-helper` 
+      : '';
+    
     return `
-      <a-scene
+      <a-scene 
         embedded
-        arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+        arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: ${DEBUG}; detectionMode: mono_and_matrix;"
         vr-mode-ui="enabled: false"
-        renderer="antialias: ${!isMobile}; alpha: true; precision: ${isMobile ? 'lowp' : 'mediump'}; logarithmicDepthBuffer: ${!isMobile}; colorManagement: true; physicallyCorrectLights: true;"
+        renderer="antialias: true; alpha: true; precision: mediump; logarithmicDepthBuffer: true;"
+        id="scene"
         loading-screen="enabled: false"
         ${debugConfig}>
-
-        <a-assets timeout="60000">
-          <a-asset-item id="castillo-asset"></a-asset-item>
-          <!-- Podríamos añadir otros assets aquí si fueran necesarios -->
+        
+        <!-- Inspector y Stats se cargarán si debug está activado -->
+        
+        <a-assets timeout="3000000">
+          <a-asset-item id="castillo-asset" src="${currentModelUrl}" 
+            response-type="arraybuffer" crossorigin="anonymous"></a-asset-item>
         </a-assets>
-
-        <a-entity light="type: ambient; color: #BBB; intensity: 0.5;"></a-entity>
-        <a-entity light="type: directional; color: #FFF; intensity: 0.6;" position="-0.5 1 1"></a-entity>
-
-        <a-camera gps-camera rotation-reader position="0 1.6 0" fov="80"></a-camera>
-
+        
+        <!-- Agregamos más información de depuración cuando ocurre una excepción -->
+        <a-entity position="0 0 -4" id="error-display" visible="false">
+          <a-text value="Error al cargar modelo" color="red" position="0 0.5 0" align="center"></a-text>
+          <a-text id="error-details" value="" color="white" position="0 0.2 0" align="center" scale="0.5 0.5 0.5"></a-text>
+        </a-entity>
+        
+        <a-camera gps-camera rotation-reader position="0 1.6 0"></a-camera>
+        
+        <!-- Modelo en low-poly mientras carga el completo -->
+        <a-box id="placeholder-model" position="0 0 -5" scale="2 2 2" color="#AAAAAA" opacity="0.5"
+          animation="property: opacity; to: 0; dur: 1000; easing: linear; startEvents: modelLoaded"></a-box>
+        
+        <!-- Modelo 3D principal con LOD (Level of Detail) -->
         <a-entity
           id="castillo-model"
-          position="0 0 -5" <!-- Posición inicial, se puede ajustar con GPS -->
-          scale="${isMobile ? '0.3 0.3 0.3' : '0.5 0.5 0.5'}"
+          position="0 0 -5"
+          scale="0.5 0.5 0.5"
           rotation="0 0 0"
-          shadow="cast: true; receive: false"
-          gltf-model="#castillo-asset" <!-- Apunta al asset item -->
-          visible="false">
+          gltf-model="#castillo-asset"
+          visible="false"
+          animation="property: visible; to: true; dur: 1; delay: 500; startEvents: loaded">
         </a-entity>
-
+        
+        <!-- Indicador de dirección hacia el modelo -->
+        <a-entity id="direction-indicator" position="0 0 -2">
+          <a-box position="0 0.5 0" color="green" depth="0.1" height="0.1" width="0.5"></a-box>
+          <a-text value="Modelo 3D" position="0 0.7 0" color="white" align="center"></a-text>
+        </a-entity>
+        
+        <a-entity id="progress-indicator" position="0 0 -3" visible="true">
+          <a-text id="loading-text" value="Cargando modelo 3D..." position="0 0.5 0" color="white" align="center" scale="0.5 0.5 0.5"></a-text>
+          <a-plane id="progress-bar-bg" position="0 0 0" width="1" height="0.1" color="#333333"></a-plane>
+          <a-plane id="progress-bar" position="-0.5 0 0.01" width="0.01" height="0.08" color="#4CAF50" scale="${loadingProgress/100} 1 1"></a-plane>
+          <a-text id="progress-text" value="${loadingProgress}%" position="0 -0.2 0" color="white" align="center" scale="0.3 0.3 0.3"></a-text>
+        </a-entity>
+        
+        <!-- Coordenadas para depuración -->
+        ${DEBUG ? `
+        <a-entity id="debug-info" position="0 -1 -3">
+          <a-text value="Debug Info" position="0 0 0" color="white" align="center" scale="0.3 0.3 0.3"></a-text>
+          <a-text id="coords-display" value="Cargando coordenadas..." position="0 -0.2 0" color="white" align="center" scale="0.2 0.2 0.2"></a-text>
+          <a-text id="model-url-display" value="URL: ${currentModelUrl.substring(0, 30)}..." position="0 -0.4 0" color="white" align="center" scale="0.15 0.15 0.15"></a-text>
+          <a-text id="attempts-display" value="Intento: ${modelLoadAttempts}" position="0 -0.6 0" color="white" align="center" scale="0.2 0.2 0.2"></a-text>
+        </a-entity>
+        ` : ''}
       </a-scene>
     `;
   };
 
-  // --- Renderizado del Componente ---
   return (
     <div className="ar-container">
-      {/* Panel de Debug (si está activado) */}
       {DEBUG && (
         <div className="debug-panel">
-          <h3>Debug Info</h3>
+          <h3>Debug</h3>
           <p>AR Ready: {String(arReady)}</p>
-          <p>Cam Active: {String(cameraActive)}</p>
-          <p>Loading: {String(modelLoading)}</p>
+          <p>Camera: {String(cameraActive)}</p>
           <p>Progress: {loadingProgress}%</p>
-          <p>Attempt: {modelLoadAttempts}/{MODEL_LOAD_CONFIG.maxAttempts}</p>
-          <p>Global Att: {globalAttempts}/{MODEL_LOAD_CONFIG.maxGlobalAttempts}</p>
-          <p>Last Att?: {String(isLastAttempt)}</p>
-          <p>URL: {currentModelUrl ? currentModelUrl.substring(currentModelUrl.lastIndexOf('/') + 1) : 'N/A'}</p>
+          <p>Attempt: {modelLoadAttempts}</p>
+          <p>URL: {currentModelUrl.substring(0, 15)}...</p>
           {loadingErrors.length > 0 && (
             <>
-              <p style={{color: '#ff6b6b', marginTop:'5px', borderTop:'1px solid #555', paddingTop:'3px'}}>Errors ({loadingErrors.length}):</p>
-              <ul style={{margin: '0', paddingLeft: '15px', fontSize: '9px', maxHeight: '50px', overflowY: 'auto'}}>
-                {loadingErrors.slice(-5).map((err, i) => ( // Mostrar últimos 5 errores
+              <p style={{color: '#ff6b6b'}}>Errores:</p>
+              <ul style={{margin: '0', paddingLeft: '15px', fontSize: '9px'}}>
+                {loadingErrors.slice(-3).map((err, i) => (
                   <li key={i}>{err}</li>
                 ))}
               </ul>
@@ -774,47 +861,51 @@ const ARViewTest: React.FC = () => {
           )}
         </div>
       )}
-
-      {/* Overlay de Error Principal */}
+      
       {error && (
         <div className="error-overlay">
           <p>{error}</p>
           <Link to="/" className="back-button">Volver al inicio</Link>
         </div>
       )}
-
-       {/* Overlay de Carga Inicial (Cámara) */}
+      
       {!arReady && !error && (
         <div className="loading-overlay">
-          <p>Inicializando cámara y AR...</p>
-          {!cameraActive && <p style={{fontSize:'0.8em', color:'#ccc'}}>Esperando permiso de cámara...</p>}
+          <p>Inicializando cámara...</p>
         </div>
       )}
-
-      {/* Indicador de Carga del Modelo (diferente del overlay inicial) */}
+      
       {modelLoading && arReady && !error && (
         <div className="model-loading-indicator">
           <div className="progress-bar-container">
             <div className="progress-bar" style={{ width: `${loadingProgress}%` }}></div>
           </div>
           <p>Cargando modelo 3D: {loadingProgress}%</p>
-           {(globalAttempts > 0 || modelLoadAttempts > 1) && ( // Mostrar intentos
-             <p className="retry-message">Intento {modelLoadAttempts}/{MODEL_LOAD_CONFIG.maxAttempts} (Global: {globalAttempts})</p>
-           )}
+          {modelLoadAttempts > 1 && (
+            <p className="retry-message">Intento {modelLoadAttempts}/4: {
+              currentModelUrl.includes('local') ? 'Usando copia local' : 
+              currentModelUrl.includes('github') ? 'Usando copia de GitHub' :
+              currentModelUrl.includes('fallback') ? 'Usando modelo simplificado' : 
+              'Reintentando...'
+            }</p>
+          )}
         </div>
       )}
-
-      {/* Botón para volver (visible siempre que no haya error fatal) */}
-      {!error && <Link to="/" className="back-button-ar">Volver</Link>}
-
-      {/* Contenedor para la Escena A-Frame Estática */}
-      {/* Se renderiza solo cuando arReady es true */}
-      <div
-        ref={sceneContainerRef}
-        className="scene-container"
-        style={{ visibility: arReady ? 'visible' : 'hidden' }} // Ocultar hasta que AR esté listo
-        dangerouslySetInnerHTML={arReady ? { __html: getStaticAframeHTML() } : undefined}
-      />
+      
+      <div className="ar-info-overlay">
+        <p>Modelo posicionado a aproximadamente {testDistance} metros de ti</p>
+      </div>
+      
+      <Link to="/" className="back-button-ar">Volver</Link>
+      
+      {/* A-Frame Scene */}
+      {arReady && (
+        <div 
+          ref={sceneContainerRef} 
+          className="scene-container" 
+          dangerouslySetInnerHTML={{ __html: getAframeHTML() }}
+        />
+      )}
     </div>
   );
 };
