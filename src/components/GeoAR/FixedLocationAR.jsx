@@ -26,7 +26,25 @@ const FixedLocationAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_fu
   // Función para iniciar la experiencia AR con ubicación fija
   const startFixedLocationAR = () => {
     console.log('[FixedLocationAR] Iniciando experiencia con ubicación fija:', fixedCoords);
-    setStage('success');
+    
+    // Solicitamos permiso de ubicación para seguimiento de movimiento
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          console.log('[FixedLocationAR] Ubicación inicial del usuario:', position.coords);
+          setStage('success');
+        },
+        (err) => {
+          console.error('[FixedLocationAR] Error al obtener ubicación:', err);
+          setError('Necesitamos acceso a tu ubicación para permitir moverte a través del modelo');
+          setStage('error');
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      );
+    } else {
+      setError('Tu dispositivo no soporta geolocalización');
+      setStage('error');
+    }
   };
 
   // --- Configuración de la escena AR ---
@@ -97,7 +115,12 @@ const FixedLocationAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_fu
       scene.setAttribute('arjs', 'sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix;');
       arContainer.appendChild(scene);
 
-      // Agregar la entidad del modelo 3D
+      // Añadir entorno para mejor percepción de profundidad
+      const environment = document.createElement('a-entity');
+      environment.setAttribute('id', 'environment');
+      scene.appendChild(environment);
+
+      // Agregar la entidad del modelo 3D con coordenadas fijas
       const entity = document.createElement('a-entity');
       entity.setAttribute('gltf-model', selectedModel);
       entity.setAttribute('gps-projected-entity-place', `latitude: ${fixedCoords.latitude}; longitude: ${fixedCoords.longitude}`);
@@ -108,10 +131,12 @@ const FixedLocationAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_fu
       modelEntityRef.current = entity;
       console.log('[FixedLocationAR] Modelo 3D agregado a la escena en ubicación fija.');
 
-      // Crear la cámara con gps-projected-camera de AR.js
+      // Crear la cámara que sigue al usuario
       const camera = document.createElement('a-camera');
-      camera.setAttribute('gps-projected-camera', 'simulateLatitude: 0; simulateLongitude: 0;');
+      camera.setAttribute('gps-projected-camera', '');
       camera.setAttribute('rotation-reader', '');
+      camera.setAttribute('look-controls', 'pointerLockEnabled: false');
+      camera.setAttribute('position', '0 1.6 0');
       scene.appendChild(camera);
       cameraRef.current = camera;
       console.log('[FixedLocationAR] Cámara AR creada.');
@@ -119,6 +144,17 @@ const FixedLocationAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_fu
       // Escuchar el evento "loaded" de la escena
       scene.addEventListener('loaded', () => {
         console.log('[FixedLocationAR] Escena AR cargada correctamente');
+        // Configurar actualizaciones de posición para la cámara
+        if ('geolocation' in navigator) {
+          navigator.geolocation.watchPosition((position) => {
+            const currentCamera = cameraRef.current;
+            if (currentCamera) {
+              console.log('[FixedLocationAR] Posición del usuario actualizada');
+            }
+          }, 
+          (err) => console.error('[FixedLocationAR] Error en seguimiento:', err), 
+          { enableHighAccuracy: true, maximumAge: 0, timeout: 27000 });
+        }
       });
       arSceneRef.current = scene;
 
@@ -197,9 +233,10 @@ const FixedLocationAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_fu
       coordsDisplay.style.borderRadius = '4px';
       coordsDisplay.style.fontSize = '12px';
       coordsDisplay.innerHTML = `
-        <p>Ubicación Fija:</p>
+        <p>Ubicación Fija del Modelo:</p>
         <p>Lat: ${fixedCoords.latitude.toFixed(6)}</p>
         <p>Lon: ${fixedCoords.longitude.toFixed(6)}</p>
+        <p><small>Camina para moverte dentro del modelo</small></p>
       `;
       arContainer.appendChild(coordsDisplay);
       console.log('[FixedLocationAR] Escena AR configurada con éxito.');

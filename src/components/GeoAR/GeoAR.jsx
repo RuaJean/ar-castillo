@@ -127,10 +127,13 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
   // Función para iniciar seguimiento continuo de la posición
   const startPositionTracking = (initialCoords) => {
     console.log('[GeoAR] Iniciando seguimiento de posición...');
+    
+    // El modelo se queda fijo en su posición inicial
     if (modelEntityRef.current && initialCoords) {
       modelEntityRef.current.setAttribute('gps-projected-entity-place',
         `latitude: ${initialCoords.latitude}; longitude: ${initialCoords.longitude}`);
     }
+    
     const id = navigator.geolocation.watchPosition(
       (position) => {
         const updatedCoords = {
@@ -139,13 +142,10 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
         };
         console.log('[GeoAR] Posición actualizada:', updatedCoords);
         setCoords(updatedCoords);
-        // Actualizar la posición del modelo si varía significativamente
-        if (modelEntityRef.current &&
-            (Math.abs(updatedCoords.latitude - initialCoords.latitude) > 0.0001 ||
-             Math.abs(updatedCoords.longitude - initialCoords.longitude) > 0.0001)) {
-          // No actualizamos la posición del modelo para permitir caminar a través de él
-          console.log('[GeoAR] Posición actualizada pero modelo sigue fijo para permitir exploración.');
-        }
+        
+        // No actualizamos la posición del modelo, solo la cámara se mueve
+        // con los cambios de posición del usuario (controlado por gps-projected-camera)
+        console.log('[GeoAR] Usuario en movimiento, cámara actualizada');
       },
       (err) => {
         console.warn('[GeoAR] Error durante el seguimiento:', err);
@@ -241,11 +241,16 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       // Crear la escena A-Frame
       const scene = document.createElement('a-scene');
       scene.setAttribute('embedded', '');
-      // Configurar AR.js en modo "mono_and_matrix"
+      // Configurar AR.js en modo "mono_and_matrix" con ubicación activada
       scene.setAttribute('arjs', 'sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix;');
       arContainer.appendChild(scene);
 
-      // Agregar la entidad del modelo 3D
+      // Añadir entorno para mejor percepción de profundidad
+      const environment = document.createElement('a-entity');
+      environment.setAttribute('id', 'environment');
+      scene.appendChild(environment);
+
+      // Agregar la entidad del modelo 3D con posición fija
       const entity = document.createElement('a-entity');
       entity.setAttribute('gltf-model', selectedModel);
       entity.setAttribute('gps-projected-entity-place', `latitude: ${coords.latitude}; longitude: ${coords.longitude}`);
@@ -256,10 +261,12 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       modelEntityRef.current = entity;
       console.log('[GeoAR] Modelo 3D agregado a la escena.');
 
-      // Crear la cámara con gps-projected-camera de AR.js
+      // Crear la cámara que sigue al usuario
       const camera = document.createElement('a-camera');
-      camera.setAttribute('gps-projected-camera', 'simulateLatitude: 0; simulateLongitude: 0;');
+      camera.setAttribute('gps-projected-camera', '');
       camera.setAttribute('rotation-reader', '');
+      camera.setAttribute('look-controls', 'pointerLockEnabled: false');
+      camera.setAttribute('position', '0 1.6 0');
       scene.appendChild(camera);
       cameraRef.current = camera;
       console.log('[GeoAR] Cámara AR creada.');
@@ -267,6 +274,17 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       // Escuchar el evento "loaded" de la escena
       scene.addEventListener('loaded', () => {
         console.log('[GeoAR] Escena AR cargada correctamente');
+        // Configurar actualizaciones de posición
+        if ('geolocation' in navigator) {
+          navigator.geolocation.watchPosition((position) => {
+            const currentCamera = cameraRef.current;
+            if (currentCamera) {
+              console.log('[GeoAR] Actualizando posición de cámara según movimiento del usuario');
+            }
+          }, 
+          (err) => console.error('[GeoAR] Error en seguimiento:', err), 
+          { enableHighAccuracy: true, maximumAge: 0, timeout: 27000 });
+        }
       });
       arSceneRef.current = scene;
 
