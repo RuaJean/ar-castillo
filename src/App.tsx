@@ -5,6 +5,7 @@ import './App.css';
 import Home from './components/Home';
 import ARView from './components/ARView';
 import ARViewTest from './components/ARViewTest';
+import ModelOptimizer from './components/ModelOptimizer';
 
 const App: React.FC = () => {
   return (
@@ -14,6 +15,7 @@ const App: React.FC = () => {
           <Route path="/" element={<Home />} />
           <Route path="/ar" element={<ARView />} />
           <Route path="/ar-test" element={<ARViewTest />} />
+          <Route path="/optimize-model" element={<ModelOptimizer />} />
         </Routes>
       </div>
     </Router>
