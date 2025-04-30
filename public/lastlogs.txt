@@ -1,0 +1,58 @@
+Ahora /#/ar-viewer/ se queda en blanco, 
+la consola tiene estos errores:
+index.BUzBp766.js:70 Uncaught ReferenceError: showARMode is not defined
+    at xy (index.BUzBp766.js:70:35469)
+    at Wu (index.BUzBp766.js:48:42543)
+    at hr (index.BUzBp766.js:48:63641)
+    at nf (index.BUzBp766.js:48:74392)
+    at Uf (index.BUzBp766.js:48:116029)
+    at Uh (index.BUzBp766.js:48:115109)
+    at $r (index.BUzBp766.js:48:114941)
+    at _f (index.BUzBp766.js:48:112012)
+    at Zf (index.BUzBp766.js:48:121630)
+    at MessagePort.re (index.BUzBp766.js:25:1596)
+xy @ index.BUzBp766.js:70
+Wu @ index.BUzBp766.js:48
+hr @ index.BUzBp766.js:48
+nf @ index.BUzBp766.js:48
+Uf @ index.BUzBp766.js:48
+Uh @ index.BUzBp766.js:48
+$r @ index.BUzBp766.js:48
+_f @ index.BUzBp766.js:48
+Zf @ index.BUzBp766.js:48
+re @ index.BUzBp766.js:25
+(index):618 [2025-03-28T14:26:56.409Z] [INFO] [index.html] Configurando detector de QR mejorado 
+(index):618 [2025-03-28T14:26:56.409Z] [INFO] [index.html] AFRAME detectado correctamente {version: '1.4.2'}
+component.js:654 Uncaught Error: The component `stats` has been already registered. Check that you are not loading two versions of the same component or two different components of the same name.
+    at e.exports.registerComponent (component.js:654:11)
+    at (index):1153:18
+e.exports.registerComponent @ component.js:654
+(anonymous) @ (index):1153
+(index):112 🔍 ARJSDebugger: Iniciando monitoreo de AR.js
+(index):408 🔍 ARJSDebugger: No se encontró escena A-Frame
+(anonymous) @ (index):408
+setTimeout
+setupSceneMonitoring @ (index):405
+(anonymous) @ (index):128
+setTimeout
+init @ (index):126
+(anonymous) @ (index):598
+setTimeout
+(anonymous) @ (index):591
+index.BUzBp766.js:70 [2025-03-28T14:27:01.283Z] [ERROR] No se encontró escena A-Frame para monitorizar 
+index.BUzBp766.js:60 [2025-03-28T14:27:01.283Z] [DEBUG] [ERROR] No se encontró escena A-Frame para monitorizar 
+index.BUzBp766.js:60 Intentando actualizar logs.txt... (requiere un backend)
+(index):500 🔍 ARJSDebugger: Intentando soluciones automáticas para problemas comunes
+(index):408 🔍 ARJSDebugger: No se encontró escena A-Frame
+(anonymous) @ (index):408
+setTimeout
+setupSceneMonitoring @ (index):405
+(anonymous) @ (index):135
+setTimeout
+init @ (index):133
+(anonymous) @ (index):598
+setTimeout
+(anonymous) @ (index):591
+index.BUzBp766.js:70 [2025-03-28T14:27:04.283Z] [ERROR] No se encontró escena A-Frame para monitorizar 
+index.BUzBp766.js:60 [2025-03-28T14:27:04.283Z] [DEBUG] [ERROR] No se encontró escena A-Frame para monitorizar 
+index.BUzBp766.js:60 Intentando actualizar logs.txt... (requiere un backend)

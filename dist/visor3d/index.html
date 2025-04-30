@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lingote de oro Museo Santiago</title> <!-- Título actualizado -->
+    <!-- Enlace al archivo CSS externo -->
+    <link rel="stylesheet" href="styles.css">
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- GLTFLoader para cargar modelos glTF/GLB -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <!-- OrbitControls para controles de navegación -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- Scripts personalizados -->
+    <script src="scripts.js" defer></script>
+</head>
+<body>
+    <!-- Contenedor del preview con la imagen de fondo -->
+<div id="preview">
+    <img id="preview-img" src="" alt="Imagen de inicio" />
+    <button id="entrar-btn">Entrar</button>
+</div>
+    <!-- Contenedor del visor 3D -->
+    <div id="container">
+        <!-- Controles de navegación -->
+        <div id="controls">
+            <button class="control-btn" id="reset-view">Vista Inicial</button>
+            <button class="control-btn" id="rotate-left">Girar Izquierda</button>
+            <button class="control-btn" id="rotate-right">Girar Derecha</button>
+            <button class="control-btn" id="zoom-in">Zoom In</button>
+            <button class="control-btn" id="zoom-out">Zoom Out</button>
+        </div>
+        <!-- Herramientas de medición y visualización -->
+        <div id="tools">
+            <button class="tool-btn" id="measure-tool">Medición (cm)</button>
+            <button class="tool-btn" id="wireframe-tool">Modo Alambrado</button>
+            <button class="tool-btn" id="light-tool">Cambiar Iluminación</button>
+            <!-- Botón para detener la autorotación -->
+            <button class="tool-btn" id="auto-rotate-tool">Detener Auto-rotación</button>
+        </div>
+        <!-- Display de medición -->
+        <div class="measurement" id="measurement-display"></div>
+        <!-- Contenedor para los ejes coordenados -->
+        <div id="axes-container"></div>
+        <!-- Botones de vistas predefinidas -->
+        <div id="views">
+            <button class="view-btn" id="view-front">Vista Frontal</button>
+            <button class="view-btn" id="view-top">Vista Superior</button>
+            <button class="view-btn" id="view-side">Vista Lateral</button>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,88 @@
+--- LOGS DEL SISTEMA AR (DEPURACIÓN) ---
+Fecha: 2023-11-14
+Hora: 16:30:45
+Versión de la aplicación: 1.0.0
+Modo de depuración: ACTIVADO
+
+[2023-11-14T16:30:45.123Z] [SYSTEM] [startup] Iniciando sistema de logs
+[2023-11-14T16:30:45.235Z] [INFO] [ARViewer] Componente ARViewer iniciado
+Datos: {"modelPath":"/oro.glb","isHttpMode":false,"userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/118.0.0.0 Safari/537.36"}
+
+[2023-11-14T16:30:45.329Z] [INFO] [index.html] AFRAME detectado correctamente
+Datos: {"version":"1.4.2"}
+
+[2023-11-14T16:30:45.452Z] [DEBUG] [camera-fix] Comprobando estado de cámara
+[2023-11-14T16:30:45.589Z] [INFO] [ARViewer] Solicitando acceso a la cámara
+[2023-11-14T16:30:46.214Z] [INFO] [ARViewer] Acceso a la cámara concedido
+Datos: {"track":"Camera 0","capabilities":"{\"zoom\":{\"min\":1,\"max\":10},\"focusDistance\":{\"min\":0,\"max\":10}}"}
+
+[2023-11-14T16:30:46.456Z] [INFO] [video-detector] Elementos de vídeo detectados en carga inicial
+Datos: {"count":1,"videoSizes":"640x480"}
+
+[2023-11-14T16:30:46.532Z] [INFO] [camera-fix] Cámara detectada y activa
+[2023-11-14T16:30:46.590Z] [INFO] [camera-fix] Ocultando overlay de permisos denegados
+
+[2023-11-14T16:30:46.678Z] [INFO] [ARViewer] Stream de video detectado activo - cámara funcional
+[2023-11-14T16:30:46.760Z] [INFO] [ARViewer] Verificando configuración AR.js
+
+[2023-11-14T16:30:46.892Z] [INFO] [marker-detector] Componente detector de marcador inicializado
+Datos: {"markerId":"marker1","markerType":"hiro"}
+
+[2023-11-14T16:30:47.012Z] [INFO] [qrcode-detector] Componente detector de QR inicializado
+Datos: {"markerId":"marker2","markerType":"barcode","value":"0"}
+
+[2023-11-14T16:30:47.345Z] [INFO] [qrcode-detector] Componente detector de QR inicializado
+Datos: {"markerId":"marker3","markerType":"barcode","value":"11"}
+
+[2023-11-14T16:30:47.512Z] [INFO] [qr-scanner] Inicializando detector QR mejorado
+[2023-11-14T16:30:47.689Z] [INFO] [qr-scanner] Sistema AR.js detectado, ampliando funcionalidad
+[2023-11-14T16:30:47.790Z] [INFO] [qr-scanner] Ajustando configuración de marcadores para QR
+
+[2023-11-14T16:30:47.901Z] [INFO] [qr-scanner] Marcador QR encontrado y configurado
+Datos: {"type":"barcode","minConfidence":0.3,"debugEnabled":true}
+
+[2023-11-14T16:30:47.999Z] [INFO] [ARViewer] Escena AR.js cargada
+[2023-11-14T16:30:48.123Z] [INFO] [qrDetector] Análisis del QR en imagen compartida
+Datos: {"type":"standard","format":"QR Code v2","size":"25x25","confidence":0.95,"isSupported":true}
+
+[2023-11-14T16:30:48.256Z] [INFO] [gltf-model-custom] Iniciando carga del modelo 3D
+Datos: {"modelSrc":"/oro.glb"}
+
+[2023-11-14T16:30:48.890Z] [INFO] [gltf-model-custom] Modelo 3D cargado correctamente
+Datos: {"animaciones":0}
+
+[2023-11-14T16:30:49.120Z] [INFO] [gltf-model-custom] Modelo cargado, esperando detección del marcador
+[2023-11-14T16:30:50.256Z] [DEBUG] [qrcode-detector] Intentando detectar QR...
+Datos: {"cameraActive":true,"markerId":"marker2"}
+
+[2023-11-14T16:30:53.489Z] [DEBUG] [qrcode-detector] Intentando detectar QR...
+Datos: {"cameraActive":true,"markerId":"marker2"}
+
+[2023-11-14T16:30:56.745Z] [DEBUG] [qrcode-detector] Intentando detectar QR...
+Datos: {"cameraActive":true,"markerId":"marker3"}
+
+[2023-11-14T16:31:00.012Z] [DEBUG] [qr-debug] Estadísticas de rendimiento
+Datos: {"fps":"28.4","videoActive":true,"videoWidth":640,"videoHeight":480,"resolution":"1280x720","arjsContext":true}
+
+[2023-11-14T16:31:00.345Z] [WARN] [qrcode-detector] El QR está muy alejado de la cámara, acérquelo
+[2023-11-14T16:31:03.678Z] [DEBUG] [qrcode-detector] Intentando detectar QR...
+Datos: {"cameraActive":true,"markerId":"marker3"}
+
+[2023-11-14T16:31:05.912Z] [INFO] [marker-detector] ¡Marcador hiro detectado!
+Datos: {"position":"{\"x\":0.021,\"y\":0.432,\"z\":-1.547}","visible":true}
+
+[2023-11-14T16:31:08.357Z] [INFO] [marker-detector] Marcador hiro perdido
+[2023-11-14T16:31:09.567Z] [DEBUG] [qrcode-detector] Intentando detectar QR...
+Datos: {"cameraActive":true,"markerId":"marker2"}
+
+[2023-11-14T16:31:12.789Z] [INFO] [qrcode-detector] ¡Código QR detectado!
+Datos: {"type":"barcode","markerValue":true,"markerDetails":"{\"visible\":true,\"position\":{\"x\":0.124,\"y\":0.567,\"z\":-1.234}}","qrAnalysis":"{\"type\":\"standard\",\"format\":\"URL\",\"confidence\":0.9,\"isSupported\":true}"}
+
+[2023-11-14T16:31:15.356Z] [INFO] [ARViewer] QR reconocido correctamente
+[2023-11-14T16:31:17.789Z] [INFO] [qrcode-detector] Código QR perdido
+Datos: {"type":"barcode","lastPosition":"{\"x\":0.124,\"y\":0.567,\"z\":-1.234}"}
+
+[2023-11-14T16:31:20.123Z] [DEBUG] [qr-debug] Estadísticas de rendimiento
+Datos: {"fps":"29.1","videoActive":true,"videoWidth":640,"videoHeight":480,"resolution":"1280x720","arjsContext":true}
+
+[2023-11-14T16:31:22.234Z] [INFO] [ARViewer] Usuario exportó logs a archivo 

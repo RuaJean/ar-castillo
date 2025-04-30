@@ -1,0 +1,6 @@
+property,value
+ambientLightIntensity,0.7
+directionalLightIntensity,1
+cameraInitialPositionX,0
+cameraInitialPositionY,0
+cameraInitialPositionZ,0.1

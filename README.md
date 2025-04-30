@@ -1,62 +1,43 @@
-# AR Castillo - Visualización de modelo 3D en realidad aumentada geolocalizada
+# Visor de Realidad Aumentada Geolocalizada
 
-Este proyecto permite visualizar un modelo 3D en realidad aumentada vinculado a una ubicación geográfica específica. El usuario puede navegar hasta la ubicación definida y visualizar el modelo en el espacio real utilizando la cámara de su dispositivo.
+Una aplicación web que muestra modelos 3D en realidad aumentada basada en la posición geográfica del usuario utilizando AR.js y A-Frame.
 
 ## Características
 
-- Geolocalización en tiempo real del usuario
-- Cálculo de distancia entre el usuario y la ubicación objetivo
-- Visualización de un modelo 3D (SantaMaria_futuro_packed.glb) en realidad aumentada
-- Capacidad para caminar alrededor y dentro del modelo
-
-## Coordenadas Objetivo
-
-El modelo se muestra en las siguientes coordenadas:
-- 39°28'09.4"N 0°25'53.5"W (39.469278, -0.431528)
+- **Realidad Aumentada Geolocalizada:** Visualiza modelos 3D en el mundo real basándose en tu ubicación GPS
+- **Modelos Seleccionables:** Elige entre varios modelos 3D para visualizar
+- **Interfaz Intuitiva:** Experiencia de usuario sencilla con instrucciones claras
 
 ## Tecnologías utilizadas
 
 - React
-- TypeScript
-- A-Frame (framework para realidad virtual y aumentada)
-- AR.js (biblioteca para realidad aumentada)
-- Three.js (motor 3D)
+- A-Frame para el entorno 3D
+- AR.js para la funcionalidad de realidad aumentada geolocalizada
 
-## Instalación
+## Requisitos del sistema
 
-1. Clona este repositorio
-2. Instala las dependencias:
-   ```
-   npm install
-   ```
-3. Inicia la aplicación:
-   ```
-   npm start
-   ```
+- Navegador moderno que soporte WebGL y WebRTC
+- Dispositivo móvil con:
+  - GPS activado
+  - Permisos de ubicación habilitados
+  - Acelerómetro y giroscopio (para la orientación)
 
-## Requisitos del dispositivo
+## Instalación y ejecución
 
-Para utilizar esta aplicación correctamente:
-
-- Navegador web moderno con soporte para WebXR
-- Acceso a la cámara
-- Acceso a la geolocalización
-- Conexión a internet
-- Preferiblemente utilizar en un dispositivo móvil para una mejor experiencia
+1. Clona el repositorio
+2. Instala las dependencias con `npm install`
+3. Ejecuta el servidor de desarrollo con `npm run dev`
+4. Accede a la aplicación desde tu navegador en `http://localhost:5173/`
 
 ## Uso
 
-1. Abra la aplicación en su dispositivo móvil
-2. Permita el acceso a la geolocalización y la cámara cuando se le solicite
-3. Navegue hasta la ubicación objetivo (se muestra en la pantalla principal)
-4. Cuando esté cerca, toque el botón "Iniciar Experiencia AR"
-5. Apunte la cámara al espacio donde debería aparecer el modelo
-6. Explore alrededor y dentro del modelo 3D
-
-## Notas de desarrollo
-
-Este proyecto utiliza React con TypeScript para la estructura base, y A-Frame con AR.js para la implementación de realidad aumentada. La geolocalización se maneja a través de la API de Geolocalización del navegador.
+1. Al abrir la aplicación, serás dirigido directamente a la experiencia de AR Geolocalizada
+2. Selecciona el modelo 3D que desees visualizar
+3. Haz clic en "Iniciar Experiencia AR"
+4. Concede permisos de ubicación cuando se te solicite
+5. La aplicación mostrará el modelo 3D en tu ubicación actual
+6. Puedes cambiar el modelo durante la experiencia usando el selector en la parte superior
 
 ## Licencia
 
-MIT
+Este proyecto se encuentra bajo licencia MIT.
