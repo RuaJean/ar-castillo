@@ -1,16 +1,57 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import * as THREE from 'three';
 import 'aframe';
 import 'aframe-ar';
 import 'aframe-extras';
 import 'aframe-look-at-component';
 import '../styles/ARView.css';
 
+// Logger simplificado (o puedes copiar el logger completo de ARViewTest si prefieres)
+const logger = {
+  info: console.info,
+  warn: console.warn,
+  error: console.error,
+  log: console.log
+};
+
+// Función de optimización runtime (copiada de ARViewTest)
+const applyRuntimeOptimizations = (model: THREE.Object3D) => {
+  logger.info('[ARView] Aplicando optimizaciones runtime...');
+  let polygonCount = 0;
+  const materials: string[] = [];
+
+  model.traverse((child: THREE.Object3D) => {
+    if ((child as THREE.Mesh).isMesh) {
+      const mesh = child as THREE.Mesh;
+      if (mesh.geometry && mesh.geometry.attributes && mesh.geometry.attributes.position) {
+          polygonCount += mesh.geometry.attributes.position.count / 3;
+      }
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
+      if (mesh.material) {
+        const materialType = Array.isArray(mesh.material) 
+          ? mesh.material.map((m: THREE.Material) => m.type).join(',') 
+          : (mesh.material as THREE.Material).type;
+        if (!materials.includes(materialType)) {
+          materials.push(materialType);
+        }
+      }
+    }
+  });
+
+  logger.info('[ARView] Optimización runtime completada.', {
+    polygons: Math.round(polygonCount),
+    materialTypes: materials.join(', ')
+  });
+};
+
 const ARView: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [arReady, setArReady] = useState(false);
   const [modelLoading, setModelLoading] = useState(true);
   const [loadingProgress, setLoadingProgress] = useState(0);
+  const sceneContainerRef = useRef<HTMLDivElement>(null);
 
   // Coordenadas del objetivo (39°28'09.4"N 0°25'53.5"W)
   const targetLat = 39.469278;
@@ -47,28 +88,30 @@ const ARView: React.FC = () => {
       if (event.lengthComputable) {
         const percentComplete = Math.round((event.loaded / event.total) * 100);
         setLoadingProgress(percentComplete);
+      } else {
+          // Simular progreso si el total no es computable
+          const estimatedProgress = Math.min(99, Math.log(event.loaded + 1) / Math.log(5000000) * 100); // Asumiendo tamaño aprox 5MB
+          setLoadingProgress(Math.round(estimatedProgress));
       }
     };
     
     xhr.onload = () => {
-      setModelLoading(false);
+        if(xhr.status >= 200 && xhr.status < 300) {
+            setModelLoading(false);
+            setLoadingProgress(100);
+        } else {
+            setError(`Error HTTP ${xhr.status} al cargar el modelo.`);
+        }
     };
     
     xhr.onerror = () => {
-      setError('Error al cargar el modelo 3D. Por favor, verifica tu conexión a internet.');
+      setError('Error de red al cargar el modelo 3D. Por favor, verifica tu conexión a internet.');
     };
     
     xhr.send();
 
-    // Añadir listener para eventos de progreso de carga en A-Frame
-    document.addEventListener('model-loaded', () => {
-      setModelLoading(false);
-    });
-
+    // Limpieza
     return () => {
-      document.removeEventListener('model-loaded', () => {
-        setModelLoading(false);
-      });
       xhr.abort();
     };
   }, []);
@@ -87,10 +130,13 @@ const ARView: React.FC = () => {
           
           // Actualizar la posición del modelo dinámicamente usando el sistema de eventos de A-Frame
           setTimeout(() => {
-            const modelEl = document.querySelector('#castillo-model');
-            if (modelEl) {
-              modelEl.setAttribute('position', `${dx} 0 ${dz}`);
-            }
+              // Asegurarse de que la escena A-Frame esté montada antes de buscar
+              const modelEl = sceneContainerRef.current?.querySelector('#castillo-model');
+              if (modelEl) {
+                  modelEl.setAttribute('position', `${dx} 0 ${dz}`);
+              } else {
+                  // logger.warn('[ARView] No se encontró #castillo-model para actualizar posición');
+              }
           }, 1000);
         },
         (err) => {
@@ -194,6 +240,37 @@ const ARView: React.FC = () => {
     }
   }, [loadingProgress, arReady]);
 
+  // Efecto para escuchar la carga del modelo y aplicar optimizaciones (similar a ARViewTest)
+  useEffect(() => {
+    if (!arReady) return;
+
+    const modelEntity = sceneContainerRef.current?.querySelector('#castillo-model');
+    if (!modelEntity) {
+      // logger.warn('[ARView] No se encontró la entidad del modelo para añadir listener model-loaded');
+      return;
+    }
+
+    const handleModelLoaded = (event: Event) => {
+      logger.info('[ARView] Evento model-loaded recibido');
+      const detail = (event as CustomEvent).detail;
+      const modelData = detail?.model as THREE.Object3D | undefined;
+      if (modelData) {
+        applyRuntimeOptimizations(modelData);
+      } else {
+        // logger.warn('[ARView] No se encontró el objeto del modelo en el evento model-loaded', { detail });
+      }
+    };
+
+    logger.info('[ARView] Añadiendo listener model-loaded a #castillo-model');
+    modelEntity.addEventListener('model-loaded', handleModelLoaded);
+
+    // Limpieza
+    return () => {
+      logger.info('[ARView] Quitando listener model-loaded de #castillo-model');
+      modelEntity.removeEventListener('model-loaded', handleModelLoaded);
+    };
+  }, [arReady]);
+
   return (
     <div className="ar-container">
       {error && (
@@ -221,7 +298,12 @@ const ARView: React.FC = () => {
       <Link to="/" className="back-button-ar">Volver</Link>
       
       {/* A-Frame Scene */}
-      {arReady && <div dangerouslySetInnerHTML={{ __html: aframeHTML }} />}
+      {arReady && 
+        <div 
+          ref={sceneContainerRef}
+          dangerouslySetInnerHTML={{ __html: aframeHTML }} 
+        />
+      }
     </div>
   );
 };
