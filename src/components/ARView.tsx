@@ -154,6 +154,7 @@ const ARView: React.FC = () => {
         scale="1 1 1"
         rotation="0 0 0"
         gltf-model="#castillo-asset"
+        shadow="cast: false; receive: false"
         visible="false"
         animation="property: visible; to: true; dur: 1; delay: 500; startEvents: loaded">
       </a-entity>

@@ -772,6 +772,11 @@ const ARViewTest: React.FC = () => {
        debug="true"
        debug-helper` 
       : '';
+      
+    // Configuraciones del modelo (incluyendo optimización de sombras)
+    const modelConfig = `
+      shadow="cast: false; receive: false"
+    `;
     
     return `
       <a-scene 
@@ -809,6 +814,7 @@ const ARViewTest: React.FC = () => {
           scale="0.5 0.5 0.5"
           rotation="0 0 0"
           gltf-model="#castillo-asset"
+          ${modelConfig}
           visible="false"
           animation="property: visible; to: true; dur: 1; delay: 500; startEvents: loaded">
         </a-entity>
