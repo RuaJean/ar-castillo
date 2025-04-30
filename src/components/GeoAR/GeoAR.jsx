@@ -152,18 +152,18 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
   const startPositionTracking = (initialCoords) => {
     console.log('[GeoAR] Iniciando seguimiento de posición...');
     
-    // Calcular una posición a 20 metros de distancia del usuario (rumbo norte)
+    // Calcular una posición a 10 metros de distancia del usuario (rumbo norte)
     const modelPosition = calculatePointAtDistance(
       initialCoords.latitude, 
       initialCoords.longitude, 
-      20, // 20 metros de distancia
+      10, // 10 metros de distancia (reducido de 20m)
       0   // Dirección norte (0 grados)
     );
     
     console.log('[GeoAR] Posición del usuario:', initialCoords);
-    console.log('[GeoAR] Posición calculada para el modelo (20m al norte):', modelPosition);
+    console.log('[GeoAR] Posición calculada para el modelo (10m al norte):', modelPosition);
     
-    // El modelo se coloca a 20 metros de distancia
+    // El modelo se coloca a 10 metros de distancia
     if (modelEntityRef.current) {
       modelEntityRef.current.setAttribute('gps-projected-entity-place',
         `latitude: ${modelPosition.latitude}; longitude: ${modelPosition.longitude}`);
@@ -261,11 +261,11 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
     if (!coords) return;
     console.log('[GeoAR] Inicializando escena AR...');
     if (!arSceneRef.current) {
-      // Calcular una posición a 20 metros de distancia del usuario (rumbo norte)
+      // Calcular una posición a 10 metros de distancia del usuario (rumbo norte)
       const modelPosition = calculatePointAtDistance(
         coords.latitude, 
         coords.longitude, 
-        20, // 20 metros de distancia
+        10, // 10 metros de distancia (reducido de 20m)
         0   // Dirección norte (0 grados)
       );
       
@@ -293,16 +293,26 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       environment.setAttribute('id', 'environment');
       scene.appendChild(environment);
 
-      // Agregar la entidad del modelo 3D a 20 metros de distancia
+      // Agregar marcador visual para ayudar a localizar el modelo
+      const marker = document.createElement('a-box');
+      marker.setAttribute('gps-projected-entity-place', `latitude: ${modelPosition.latitude}; longitude: ${modelPosition.longitude}`);
+      marker.setAttribute('scale', '1 5 1');
+      marker.setAttribute('position', '0 2.5 0');
+      marker.setAttribute('color', '#FF5733');
+      marker.setAttribute('emissive', '#FF5733');
+      marker.setAttribute('emissive-intensity', '0.5');
+      scene.appendChild(marker);
+      
+      // Agregar la entidad del modelo 3D a 10 metros de distancia
       const entity = document.createElement('a-entity');
       entity.setAttribute('gltf-model', selectedModel);
       entity.setAttribute('gps-projected-entity-place', `latitude: ${modelPosition.latitude}; longitude: ${modelPosition.longitude}`);
-      entity.setAttribute('scale', '10 10 10');
+      entity.setAttribute('scale', '15 15 15'); // Aumentado tamaño para mejor visibilidad
       entity.setAttribute('position', '0 0 0');
       entity.setAttribute('rotation', '0 0 0');
       scene.appendChild(entity);
       modelEntityRef.current = entity;
-      console.log('[GeoAR] Modelo 3D agregado a 20 metros de distancia del usuario');
+      console.log('[GeoAR] Modelo 3D agregado a 10 metros de distancia del usuario');
 
       // Crear la cámara que sigue al usuario
       const camera = document.createElement('a-camera');
@@ -323,6 +333,25 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
             const currentCamera = cameraRef.current;
             if (currentCamera) {
               console.log('[GeoAR] Actualizando posición de cámara según movimiento del usuario');
+              
+              // Calcular distancia al modelo
+              const userPos = { 
+                latitude: position.coords.latitude, 
+                longitude: position.coords.longitude 
+              };
+              const distanceToModel = calculateDistance(userPos, modelPosition);
+              
+              // Actualizar display con distancia
+              const coordsDisplay = document.querySelector('.ar-coords-display');
+              if (coordsDisplay) {
+                coordsDisplay.innerHTML = `
+                  <p>Tu ubicación:</p>
+                  <p>Lat: ${position.coords.latitude.toFixed(6)}</p>
+                  <p>Lon: ${position.coords.longitude.toFixed(6)}</p>
+                  <p>Modelo a ${distanceToModel.toFixed(1)}m al norte</p>
+                  <p><b>Busca el marcador naranja</b></p>
+                `;
+              }
             }
           }, 
           (err) => console.error('[GeoAR] Error en seguimiento:', err), 
@@ -409,11 +438,37 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
         <p>Tu ubicación:</p>
         <p>Lat: ${coords.latitude.toFixed(6)}</p>
         <p>Lon: ${coords.longitude.toFixed(6)}</p>
-        <p>Modelo a 20m al norte</p>
+        <p>Modelo a 10m al norte</p>
+        <p><b>Busca el marcador naranja</b></p>
       `;
       arContainer.appendChild(coordsDisplay);
       console.log('[GeoAR] Escena AR configurada con éxito.');
     }
+  };
+
+  // Función para calcular la distancia entre dos puntos GPS
+  const calculateDistance = (point1, point2) => {
+    // Radio de la Tierra en metros
+    const R = 6378137;
+    
+    // Convertir a radianes
+    const lat1 = point1.latitude * Math.PI / 180;
+    const lon1 = point1.longitude * Math.PI / 180;
+    const lat2 = point2.latitude * Math.PI / 180;
+    const lon2 = point2.longitude * Math.PI / 180;
+    
+    // Diferencias
+    const dLat = lat2 - lat1;
+    const dLon = lon2 - lon1;
+    
+    // Fórmula haversine
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1) * Math.cos(lat2) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const distance = R * c;
+    
+    return distance; // Distancia en metros
   };
 
   // Función para actualizar el modelo 3D en la escena AR
