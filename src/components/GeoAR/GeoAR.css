@@ -316,43 +316,4 @@
     font-size: 0.9rem;
     padding: 8px 12px;
   }
-}
-
-/* Estilos para los controles de navegación */
-.ar-nav-controls {
-  display: flex;
-  gap: 15px;
-  justify-content: center;
-}
-
-.ar-nav-controls button {
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  border: none;
-  background-color: rgba(0, 0, 0, 0.7);
-  color: white;
-  font-size: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background-color 0.2s, transform 0.2s;
-}
-
-.ar-nav-controls button:hover {
-  background-color: rgba(0, 0, 0, 0.9);
-  transform: scale(1.1);
-}
-
-.ar-nav-controls button:active {
-  transform: scale(0.95);
-}
-
-@media (max-width: 768px) {
-  .ar-nav-controls button {
-    width: 50px;
-    height: 50px;
-    font-size: 20px;
-  }
 } 

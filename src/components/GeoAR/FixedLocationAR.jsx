@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import './GeoAR.css';
-import * as THREE from 'three';
 
 const FixedLocationAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' }) => {
   const [stage, setStage] = useState('initial'); // "initial", "requesting", "success", "error"
@@ -101,23 +100,18 @@ const FixedLocationAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_fu
       // Agregar la entidad del modelo 3D
       const entity = document.createElement('a-entity');
       entity.setAttribute('gltf-model', selectedModel);
-      entity.setAttribute('gps-entity-place', `latitude: ${fixedCoords.latitude}; longitude: ${fixedCoords.longitude}`);
+      entity.setAttribute('gps-projected-entity-place', `latitude: ${fixedCoords.latitude}; longitude: ${fixedCoords.longitude}`);
       entity.setAttribute('scale', '10 10 10');
       entity.setAttribute('position', '0 0 0');
       entity.setAttribute('rotation', '0 0 0');
-      // Permitir que el usuario pueda atravesar el modelo
-      entity.setAttribute('material', 'opacity: 0.9; transparent: true;');
-      entity.setAttribute('data-aframe-traverse', 'true');
       scene.appendChild(entity);
       modelEntityRef.current = entity;
       console.log('[FixedLocationAR] Modelo 3D agregado a la escena en ubicación fija.');
 
-      // Crear la cámara con gps-camera de AR.js
+      // Crear la cámara con gps-projected-camera de AR.js
       const camera = document.createElement('a-camera');
-      camera.setAttribute('gps-camera', 'simulateLatitude: 0; simulateLongitude: 0; minDistance: 0; maxDistance: 100000');
+      camera.setAttribute('gps-projected-camera', 'simulateLatitude: 0; simulateLongitude: 0;');
       camera.setAttribute('rotation-reader', '');
-      camera.setAttribute('look-controls', 'enabled: true; magicWindowTrackingEnabled: true; touchEnabled: true; mouseEnabled: true');
-      camera.setAttribute('wasd-controls', 'enabled: true; acceleration: 100;');
       scene.appendChild(camera);
       cameraRef.current = camera;
       console.log('[FixedLocationAR] Cámara AR creada.');
@@ -209,91 +203,6 @@ const FixedLocationAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_fu
       `;
       arContainer.appendChild(coordsDisplay);
       console.log('[FixedLocationAR] Escena AR configurada con éxito.');
-
-      // Controles en pantalla para navegación
-      const navControls = document.createElement('div');
-      navControls.className = 'ar-nav-controls';
-      navControls.style.position = 'fixed';
-      navControls.style.bottom = '20px';
-      navControls.style.left = '50%';
-      navControls.style.transform = 'translateX(-50%)';
-      navControls.style.display = 'flex';
-      navControls.style.gap = '10px';
-      navControls.style.zIndex = '2000';
-
-      // Botón para acercarse
-      const moveForwardBtn = document.createElement('button');
-      moveForwardBtn.innerHTML = '&#x2B06;'; // Flecha hacia arriba
-      moveForwardBtn.style.width = '50px';
-      moveForwardBtn.style.height = '50px';
-      moveForwardBtn.style.borderRadius = '50%';
-      moveForwardBtn.style.border = 'none';
-      moveForwardBtn.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-      moveForwardBtn.style.color = 'white';
-      moveForwardBtn.style.fontSize = '24px';
-      moveForwardBtn.style.cursor = 'pointer';
-      moveForwardBtn.addEventListener('mousedown', () => {
-        if (cameraRef.current) {
-          const moveInterval = setInterval(() => {
-            const direction = new THREE.Vector3(0, 0, -1);
-            direction.applyQuaternion(cameraRef.current.object3D.quaternion);
-            cameraRef.current.object3D.position.add(direction.multiplyScalar(0.2));
-          }, 20);
-          moveForwardBtn.addEventListener('mouseup', () => clearInterval(moveInterval));
-          moveForwardBtn.addEventListener('mouseleave', () => clearInterval(moveInterval));
-        }
-      });
-      navControls.appendChild(moveForwardBtn);
-
-      // Botón para retroceder
-      const moveBackBtn = document.createElement('button');
-      moveBackBtn.innerHTML = '&#x2B07;'; // Flecha hacia abajo
-      moveBackBtn.style.width = '50px';
-      moveBackBtn.style.height = '50px';
-      moveBackBtn.style.borderRadius = '50%';
-      moveBackBtn.style.border = 'none';
-      moveBackBtn.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-      moveBackBtn.style.color = 'white';
-      moveBackBtn.style.fontSize = '24px';
-      moveBackBtn.style.cursor = 'pointer';
-      moveBackBtn.addEventListener('mousedown', () => {
-        if (cameraRef.current) {
-          const moveInterval = setInterval(() => {
-            const direction = new THREE.Vector3(0, 0, 1);
-            direction.applyQuaternion(cameraRef.current.object3D.quaternion);
-            cameraRef.current.object3D.position.add(direction.multiplyScalar(0.2));
-          }, 20);
-          moveBackBtn.addEventListener('mouseup', () => clearInterval(moveInterval));
-          moveBackBtn.addEventListener('mouseleave', () => clearInterval(moveInterval));
-        }
-      });
-      navControls.appendChild(moveBackBtn);
-
-      arContainer.appendChild(navControls);
-
-      // Mensaje de ayuda para navegación
-      const helpMessage = document.createElement('div');
-      helpMessage.style.position = 'fixed';
-      helpMessage.style.bottom = '80px';
-      helpMessage.style.left = '50%';
-      helpMessage.style.transform = 'translateX(-50%)';
-      helpMessage.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-      helpMessage.style.color = 'white';
-      helpMessage.style.padding = '10px';
-      helpMessage.style.borderRadius = '4px';
-      helpMessage.style.fontSize = '14px';
-      helpMessage.style.textAlign = 'center';
-      helpMessage.style.zIndex = '2000';
-      helpMessage.innerHTML = 'Mueve el dispositivo para mirar alrededor<br>Camina para moverte dentro del modelo<br>Usa los botones para avanzar/retroceder';
-      helpMessage.style.opacity = '1';
-      setTimeout(() => {
-        helpMessage.style.transition = 'opacity 1s';
-        helpMessage.style.opacity = '0';
-        setTimeout(() => {
-          helpMessage.style.display = 'none';
-        }, 1000);
-      }, 5000);
-      arContainer.appendChild(helpMessage);
     }
   };
 
