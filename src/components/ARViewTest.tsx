@@ -5,7 +5,6 @@ import 'aframe-ar';
 import 'aframe-extras';
 import 'aframe-look-at-component';
 import '../styles/ARView.css';
-import * as THREE from 'three';
 
 // Sistema de logging para depuración
 const DEBUG = true;
@@ -162,47 +161,6 @@ const MODEL_LOAD_CONFIG = {
   minValidSizeBytes: 10000,   // Tamaño mínimo esperado para un modelo GLB válido
   retryDelayMs: 1000,         // Retraso entre intentos de carga
   progressThrottleMs: 200,    // Limitar actualizaciones de progreso para mejor rendimiento
-};
-
-// Función para aplicar optimizaciones seguras en tiempo de ejecución
-const applyRuntimeOptimizations = (model: THREE.Object3D) => {
-  logger.info('Aplicando optimizaciones runtime al modelo cargado...');
-  let polygonCount = 0;
-  const materials: string[] = [];
-
-  model.traverse((child: THREE.Object3D) => {
-    if ((child as THREE.Mesh).isMesh) {
-      const mesh = child as THREE.Mesh;
-      if (mesh.geometry && mesh.geometry.attributes && mesh.geometry.attributes.position) {
-        polygonCount += mesh.geometry.attributes.position.count / 3;
-      }
-      
-      // 1. Desactivar sombras (seguro)
-      mesh.castShadow = false;
-      mesh.receiveShadow = false;
-      
-      // 2. Registrar tipo de material (informativo)
-      if (mesh.material) {
-        const materialType = Array.isArray(mesh.material) 
-          ? mesh.material.map((m: THREE.Material) => m.type).join(',')
-          : (mesh.material as THREE.Material).type;
-        if (!materials.includes(materialType)) {
-          materials.push(materialType);
-        }
-      }
-      
-      // --- EVITAR optimizaciones peligrosas o incorrectas --- 
-      // NO HACER: mesh.material.transparent = true; (cambio visual, no optimización de memoria)
-      // NO HACER: mesh.geometry.attributes.position.needsUpdate = true; (inútil sin cambios)
-      // NO HACER: mesh.geometry.dispose(); (rompería el renderizado)
-      // NO HACER: THREE.Cache.clear(); (demasiado amplio)
-    }
-  });
-
-  logger.info('Optimización runtime completada.', {
-    polygons: Math.round(polygonCount),
-    materialTypes: materials.join(', ')
-  });
 };
 
 const ARViewTest: React.FC = () => {
@@ -794,38 +752,6 @@ const ARViewTest: React.FC = () => {
     return () => clearInterval(intervalId);
   }, [arReady, modelLoading, loadingProgress, cameraActive, modelLoadAttempts]);
 
-  // Efecto para escuchar la carga del modelo y aplicar optimizaciones
-  useEffect(() => {
-    if (!arReady) return;
-
-    const modelEntity = sceneContainerRef.current?.querySelector('#castillo-model');
-    if (!modelEntity) {
-      logger.warn('No se encontró la entidad del modelo para añadir listener model-loaded');
-      return;
-    }
-
-    const handleModelLoaded = (event: Event) => {
-      logger.info('Evento model-loaded recibido por la entidad');
-      const detail = (event as CustomEvent).detail;
-      const modelData = detail?.model as THREE.Object3D | undefined;
-      if (modelData) {
-        applyRuntimeOptimizations(modelData);
-      } else {
-        logger.warn('No se encontró el objeto del modelo en el evento model-loaded', { detail });
-      }
-    };
-
-    logger.info('Añadiendo listener model-loaded a la entidad #castillo-model');
-    modelEntity.addEventListener('model-loaded', handleModelLoaded);
-
-    // Limpieza del listener
-    return () => {
-      logger.info('Quitando listener model-loaded de la entidad #castillo-model');
-      modelEntity.removeEventListener('model-loaded', handleModelLoaded);
-    };
-
-  }, [arReady]); // Depende solo de arReady para añadir el listener una vez
-
   // Utilidad para formatear bytes en forma legible
   const formatBytes = (bytes: number, decimals = 2) => {
     if (bytes === 0) return '0 Bytes';
@@ -846,11 +772,6 @@ const ARViewTest: React.FC = () => {
        debug="true"
        debug-helper` 
       : '';
-      
-    // Configuraciones del modelo (incluyendo optimización de sombras)
-    const modelConfig = `
-      shadow="cast: false; receive: false"
-    `;
     
     return `
       <a-scene 
@@ -888,7 +809,6 @@ const ARViewTest: React.FC = () => {
           scale="0.5 0.5 0.5"
           rotation="0 0 0"
           gltf-model="#castillo-asset"
-          ${modelConfig}
           visible="false"
           animation="property: visible; to: true; dur: 1; delay: 500; startEvents: loaded">
         </a-entity>
