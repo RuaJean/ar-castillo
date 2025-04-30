@@ -124,14 +124,49 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
     }, 15000);
   };
 
+  // Función para calcular un punto a cierta distancia de la ubicación del usuario
+  const calculatePointAtDistance = (lat, lon, distanceMeters, bearing = 0) => {
+    // Radio de la Tierra en metros
+    const R = 6378137;
+    
+    // Convertir a radianes
+    const latRad = lat * Math.PI / 180;
+    const lonRad = lon * Math.PI / 180;
+    const bearingRad = bearing * Math.PI / 180;
+    
+    // Cálculo del nuevo punto
+    const d = distanceMeters / R;
+    const newLatRad = Math.asin(Math.sin(latRad) * Math.cos(d) + 
+                      Math.cos(latRad) * Math.sin(d) * Math.cos(bearingRad));
+    const newLonRad = lonRad + Math.atan2(Math.sin(bearingRad) * Math.sin(d) * Math.cos(latRad),
+                       Math.cos(d) - Math.sin(latRad) * Math.sin(newLatRad));
+    
+    // Convertir de vuelta a grados
+    const newLat = newLatRad * 180 / Math.PI;
+    const newLon = newLonRad * 180 / Math.PI;
+    
+    return { latitude: newLat, longitude: newLon };
+  };
+
   // Función para iniciar seguimiento continuo de la posición
   const startPositionTracking = (initialCoords) => {
     console.log('[GeoAR] Iniciando seguimiento de posición...');
     
-    // El modelo se queda fijo en su posición inicial
-    if (modelEntityRef.current && initialCoords) {
+    // Calcular una posición a 20 metros de distancia del usuario (rumbo norte)
+    const modelPosition = calculatePointAtDistance(
+      initialCoords.latitude, 
+      initialCoords.longitude, 
+      20, // 20 metros de distancia
+      0   // Dirección norte (0 grados)
+    );
+    
+    console.log('[GeoAR] Posición del usuario:', initialCoords);
+    console.log('[GeoAR] Posición calculada para el modelo (20m al norte):', modelPosition);
+    
+    // El modelo se coloca a 20 metros de distancia
+    if (modelEntityRef.current) {
       modelEntityRef.current.setAttribute('gps-projected-entity-place',
-        `latitude: ${initialCoords.latitude}; longitude: ${initialCoords.longitude}`);
+        `latitude: ${modelPosition.latitude}; longitude: ${modelPosition.longitude}`);
     }
     
     const id = navigator.geolocation.watchPosition(
@@ -226,6 +261,14 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
     if (!coords) return;
     console.log('[GeoAR] Inicializando escena AR...');
     if (!arSceneRef.current) {
+      // Calcular una posición a 20 metros de distancia del usuario (rumbo norte)
+      const modelPosition = calculatePointAtDistance(
+        coords.latitude, 
+        coords.longitude, 
+        20, // 20 metros de distancia
+        0   // Dirección norte (0 grados)
+      );
+      
       // Crear contenedor para la escena AR
       const arContainer = document.createElement('div');
       arContainer.className = 'ar-scene-container';
@@ -250,16 +293,16 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       environment.setAttribute('id', 'environment');
       scene.appendChild(environment);
 
-      // Agregar la entidad del modelo 3D con posición fija
+      // Agregar la entidad del modelo 3D a 20 metros de distancia
       const entity = document.createElement('a-entity');
       entity.setAttribute('gltf-model', selectedModel);
-      entity.setAttribute('gps-projected-entity-place', `latitude: ${coords.latitude}; longitude: ${coords.longitude}`);
+      entity.setAttribute('gps-projected-entity-place', `latitude: ${modelPosition.latitude}; longitude: ${modelPosition.longitude}`);
       entity.setAttribute('scale', '10 10 10');
       entity.setAttribute('position', '0 0 0');
       entity.setAttribute('rotation', '0 0 0');
       scene.appendChild(entity);
       modelEntityRef.current = entity;
-      console.log('[GeoAR] Modelo 3D agregado a la escena.');
+      console.log('[GeoAR] Modelo 3D agregado a 20 metros de distancia del usuario');
 
       // Crear la cámara que sigue al usuario
       const camera = document.createElement('a-camera');
@@ -363,8 +406,10 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       coordsDisplay.style.borderRadius = '4px';
       coordsDisplay.style.fontSize = '12px';
       coordsDisplay.innerHTML = `
+        <p>Tu ubicación:</p>
         <p>Lat: ${coords.latitude.toFixed(6)}</p>
         <p>Lon: ${coords.longitude.toFixed(6)}</p>
+        <p>Modelo a 20m al norte</p>
       `;
       arContainer.appendChild(coordsDisplay);
       console.log('[GeoAR] Escena AR configurada con éxito.');
