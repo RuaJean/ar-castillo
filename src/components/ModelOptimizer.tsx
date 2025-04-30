@@ -23,7 +23,7 @@ const ModelOptimizer: React.FC = () => {
   const downloadLinkRef = useRef<HTMLAnchorElement>(null);
 
   // --- Configuración --- 
-  const originalModelUrl = '/SantaMaria_futuro.glb'; // Carga el archivo desde la carpeta public
+  const originalModelUrl = 'https://jeanrua.com/models/SantaMaria_futuro.glb'; // Carga el archivo desde la carpeta public
   const optimizedFileName = 'SantaMaria_futuro_optimized.glb';
   const simplificationRatio = 0.5; // Reducir al 50% de polígonos (ajustable)
   // --- Fin Configuración ---
