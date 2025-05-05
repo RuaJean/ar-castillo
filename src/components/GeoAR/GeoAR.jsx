@@ -355,10 +355,7 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       const entity = document.createElement('a-entity');
       entity.setAttribute('id', 'main-model');
       entity.setAttribute('gltf-model', selectedModel);
-      // Ajustar la escala para que resulte más realista (1 unidad = 1 m en AR.js)
-      // El carro era muy pequeño, lo ampliamos
-      const defaultScale = selectedModel.includes('/models/car.glb') ? '8 8 8' : '3 3 3';
-      entity.setAttribute('scale', defaultScale);
+      entity.setAttribute('scale', '1 1 1');
       // Sin posición/rotación manual: lo maneja AR.js
       modelContainer.appendChild(entity);
       modelEntityRef.current = entity;
@@ -493,7 +490,8 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       resetButton.addEventListener('click', () => {
         // Reiniciar la posición de la cámara y el modelo
         cameraRef.current.setAttribute('gps-projected-camera', 'gpsMinAccuracy: 50; gpsMinDistance: 0; gpsTimeInterval: 100');
-        // No modificamos la posición relativa del contenedor para no romper el anclaje GPS
+        modelContainer.setAttribute('position', '0 0 0');
+        console.log('[GeoAR] Posición reiniciada');
         infoPanel.innerHTML = useManualCoords 
           ? `Posición reiniciada. Modelo en: Lat ${modelPosition.latitude.toFixed(6)}, Lon ${modelPosition.longitude.toFixed(6)}`
           : 'Posición reiniciada. ¡Comienza a caminar!';
@@ -566,6 +564,20 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       arContainer.appendChild(modelSelector);
 
       console.log('[GeoAR] Escena AR configurada con éxito.');
+
+      // Ajuste dinámico de escala según distancia para una sensación más natural
+      const BASE_SCALE = 1; // Escala base cuando el usuario está a 1 m del modelo
+
+      // AR.js lanza este evento cada vez que recalcula la posición del modelo
+      modelContainer.addEventListener('gps-entity-place-update-position', (e) => {
+        const { distance } = e.detail; // Distancia en metros entre la cámara y el modelo
+        if (!distance || distance <= 0) return;
+
+        // Factor de escala inversamente proporcional (capado a 1 = tamaño real)
+        const scaleFactor = Math.min(1, 10 / distance); // A 10 m → 1/10 del tamaño; a 1 m → tamaño real
+        const newScale = BASE_SCALE * scaleFactor;
+        entity.setAttribute('scale', `${newScale} ${newScale} ${newScale}`);
+      });
     }
   };
 
