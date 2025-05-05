@@ -347,39 +347,25 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       // Crear el contenedor para el modelo
       const modelContainer = document.createElement('a-entity');
       modelContainer.setAttribute('id', 'model-container');
-      modelContainer.setAttribute('position', '0 0 0');
+      // NO establecer posición manual; AR.js calculará la posición relativa
       scene.appendChild(modelContainer);
-      
-      // Agregar marcador visual para ayudar a localizar el modelo
-      const marker = document.createElement('a-box');
-      marker.setAttribute('scale', '1 5 1');
-      marker.setAttribute('position', '0 2.5 0');
-      marker.setAttribute('color', '#FF5733');
-      marker.setAttribute('emissive', '#FF5733');
-      marker.setAttribute('emissive-intensity', '0.5');
-      modelContainer.appendChild(marker);
       
       // Agregar el modelo 3D
       const entity = document.createElement('a-entity');
       entity.setAttribute('id', 'main-model');
       entity.setAttribute('gltf-model', selectedModel);
       entity.setAttribute('scale', '1 1 1');
-      entity.setAttribute('position', '0 0 0');
-      entity.setAttribute('rotation', '0 0 0');
+      // Sin posición/rotación manual: lo maneja AR.js
       modelContainer.appendChild(entity);
       modelEntityRef.current = entity;
 
       // Crear la cámara
-      const camera = document.createElement('a-entity');
+      const camera = document.createElement('a-camera');
       camera.setAttribute('id', 'camera');
-      // Declarar explícitamente la cámara para que A-Frame no inserte una cámara por defecto
-      camera.setAttribute('camera', 'active: true');
-      // Componente de AR.js que actualiza la posición vía GPS/sensores
       camera.setAttribute('gps-projected-camera', 'gpsMinAccuracy: 30');
-      // Altura estándar aproximada de los ojos del usuario
+      camera.setAttribute('rotation-reader', '');
+      camera.setAttribute('look-controls', 'pointerLockEnabled: false');
       camera.setAttribute('position', '0 1.6 0');
-      // Habilitar controles de orientación del dispositivo
-      camera.setAttribute('look-controls', 'enabled: true');
       scene.appendChild(camera);
       cameraRef.current = camera;
       
