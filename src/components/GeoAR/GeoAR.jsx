@@ -312,13 +312,8 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       // - Si se usan coordenadas manuales, el modelo va exactamente en esas coordenadas
       // - Si se usa GPS, el modelo se coloca a 10m del usuario en dirección norte
       const modelPosition = useManualCoords 
-        ? { ...coords } // Usar exactamente las coordenadas especificadas
-        : calculatePointAtDistance(
-            coords.latitude, 
-            coords.longitude, 
-            10, // 10 metros de distancia (reducido de 20m)
-            0   // Dirección norte (0 grados)
-          );
+        ? { ...coords } // Coordenadas manuales
+        : { ...coords }; // Si se usa GPS, colocamos el modelo exactamente en la posición del usuario
       
       // Crear contenedor para la escena AR
       const arContainer = document.createElement('div');
