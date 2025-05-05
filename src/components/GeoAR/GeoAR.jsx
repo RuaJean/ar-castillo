@@ -417,6 +417,9 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
         // Guardamos las coordenadas objetivo para calcular distancia en el panel informativo
         initialModelPosition = { latitude: modelPosition.latitude, longitude: modelPosition.longitude };
         
+        // Una vez la escena AR está lista, ocultamos la pantalla de carga
+        setStage('started');
+        
         // Configurar seguimiento continuo de GPS (solo si no usamos coordenadas manuales)
         if ('geolocation' in navigator) {
           // Establecer posición de la cámara (usuario) y del modelo
@@ -599,7 +602,7 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
 
   // Efecto para actualizar el modelo cuando cambie selectedModel
   useEffect(() => {
-    if (stage === 'success' && modelEntityRef.current) {
+    if ((stage === 'success' || stage === 'started') && modelEntityRef.current) {
       updateARModel(selectedModel);
     }
   }, [selectedModel, stage]);
