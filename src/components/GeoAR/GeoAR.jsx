@@ -4,10 +4,13 @@ import './GeoAR.css';
 const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' }) => {
   const [stage, setStage] = useState('initial'); // "initial", "requesting", "success", "error"
   const [error, setError] = useState(null);
-  const [coords, setCoords] = useState(null);
+  const [coords, setCoords] = useState(null); // Coordenadas del USUARIO (GPS o manuales si se usan como inicio)
   const [permissionStatus, setPermissionStatus] = useState(null);
-  const [gpsWatchId, setGpsWatchId] = useState(null);
+  const [gpsWatchId, setGpsWatchId] = useState(null); // ID para el watchPosition del panel informativo (opcional)
   const [selectedModel, setSelectedModel] = useState(modelPath);
+  const [manualLatitude, setManualLatitude] = useState(''); // Nuevo estado
+  const [manualLongitude, setManualLongitude] = useState(''); // Nuevo estado
+  const [useManualCoords, setUseManualCoords] = useState(false); // Nuevo estado
   
   // Lista de modelos disponibles
   const availableModels = [
@@ -568,13 +571,10 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       {stage === 'initial' && (
         <div className="geo-ar-permission">
           <h2>AR Geolocalizado</h2>
-          <p>Esta experiencia requiere acceso a tu ubicación precisa</p>
-          
-          {/* Selector de modelos 3D */}
           <div className="model-selector">
-            <h3>Selecciona un modelo 3D:</h3>
-            <select 
-              value={selectedModel} 
+            <h3>1. Selecciona un modelo 3D:</h3>
+            <select
+              value={selectedModel}
               onChange={(e) => setSelectedModel(e.target.value)}
               className="geo-ar-model-select"
             >
@@ -585,53 +585,102 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
               ))}
             </select>
           </div>
-          
-          {/* Nuevas instrucciones para móviles */}
-          <div className="mobile-instructions">
-            <p>En dispositivos móviles:</p>
-            <ol>
-              <li>Abre ajustes del navegador</li>
-              <li>Habilita permisos de ubicación</li>
-              <li>Asegúrate que el GPS esté activado</li>
-              <li>Recarga la página</li>
-            </ol>
+
+          <div className="manual-coords-selector">
+            <h3>2. Elige la ubicación del modelo:</h3>
+            <label className="geo-ar-checkbox-label">
+              <input
+                type="checkbox"
+                checked={!useManualCoords}
+                onChange={(e) => setUseManualCoords(!e.target.checked)}
+              />
+              Usar mi ubicación GPS (el modelo aparecerá cerca)
+            </label>
+            <label className="geo-ar-checkbox-label">
+              <input
+                type="checkbox"
+                checked={useManualCoords}
+                onChange={(e) => setUseManualCoords(e.target.checked)}
+              />
+              Fijar coordenadas manualmente:
+            </label>
+            {useManualCoords && (
+              <div className="manual-coords-inputs">
+                <input
+                  type="number"
+                  placeholder="Latitud (ej: 40.7128)"
+                  value={manualLatitude}
+                  onChange={(e) => setManualLatitude(e.target.value)}
+                  step="any"
+                  className="geo-ar-coord-input"
+                />
+                <input
+                  type="number"
+                  placeholder="Longitud (ej: -74.0060)"
+                  value={manualLongitude}
+                  onChange={(e) => setManualLongitude(e.target.value)}
+                  step="any"
+                  className="geo-ar-coord-input"
+                />
+              </div>
+            )}
           </div>
 
-          <img 
-            src="https://cdn-icons-png.flaticon.com/512/684/684908.png" 
-            alt="GPS icon" 
-            className="geo-ar-location-icon" 
-          />
-          {permissionStatus && (
-            <div className="geo-ar-permission-status">
-              <p>Estado del permiso: <strong>{getPermissionText()}</strong></p>
+          <p>
+            {useManualCoords
+              ? 'El modelo se colocará en las coordenadas especificadas.'
+              : 'Esta experiencia requiere acceso a tu ubicación precisa para colocar el modelo cerca de ti.'}
+          </p>
+
+          {!useManualCoords && (
+            <>
+              <img
+                src="https://cdn-icons-png.flaticon.com/512/684/684908.png"
+                alt="GPS icon"
+                className="geo-ar-location-icon"
+              />
+              {permissionStatus && (
+                <div className="geo-ar-permission-status">
+                  <p>Estado del permiso GPS: <strong>{getPermissionText()}</strong></p>
+                </div>
+              )}
+              <p className="geo-ar-instructions">
+                {permissionStatus === 'denied'
+                  ? 'Debes permitir el acceso a tu ubicación desde la configuración de tu navegador para continuar.'
+                  : 'Haz clic en "Iniciar Experiencia AR" para solicitar el acceso a tu ubicación.'}
+              </p>
+            </>
+          )}
+          
+          {!useManualCoords && (
+            <div className="mobile-instructions">
+              <p>En móviles (si usas GPS):</p>
+              <ol>
+                <li>Abre ajustes del navegador</li>
+                <li>Habilita permisos de ubicación</li>
+                <li>Asegúrate que el GPS esté activado</li>
+                <li>Recarga la página</li>
+              </ol>
             </div>
           )}
-          <p className="geo-ar-instructions">
-            {permissionStatus === 'denied'
-              ? 'Debes permitir el acceso a tu ubicación desde la configuración de tu navegador para continuar.'
-              : 'Haz clic en "Iniciar Experiencia AR" para solicitar el acceso a tu ubicación.'}
-          </p>
-          <button 
-            onClick={requestGeolocation} 
+
+          <button
+            onClick={requestGeolocation}
             className="geo-ar-permission-btn"
-            disabled={permissionStatus === 'denied'}
+            disabled={!useManualCoords && permissionStatus === 'denied'}
           >
             Iniciar Experiencia AR
           </button>
           
-          {/* Nuevo botón para abrir ajustes en móviles */}
           {permissionStatus === 'denied' && (
             <button 
               className="geo-ar-settings-btn"
               onClick={() => {
-                // Método universal para abrir configuración en móviles
                 if (navigator.permissions && navigator.permissions.revoke) {
                   navigator.permissions.revoke({ name: 'geolocation' }).then(() => {
                     window.location.reload();
                   });
                 } else {
-                  // Deep link para ajustes de ubicación en Android/iOS
                   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
                   window.location.href = isIOS ? 'App-Prefs:Privacy&path=LOCATION' : 'android.settings.LOCATION_SOURCE_SETTINGS';
                 }
@@ -644,7 +693,6 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
             Volver
           </button>
           
-          {/* Nuevo botón para experiencia con ubicación fija */}
           <button 
             onClick={() => window.location.href = '/ar-fijo'} 
             className="geo-ar-fixed-location-btn"
