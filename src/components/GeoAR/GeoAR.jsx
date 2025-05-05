@@ -360,11 +360,11 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       modelEntityRef.current = entity;
 
       // Crear la cámara
-      const camera = document.createElement('a-camera');
+      const camera = document.createElement('a-entity');
       camera.setAttribute('id', 'camera');
+      camera.setAttribute('camera', 'active: true');
       camera.setAttribute('gps-projected-camera', 'gpsMinAccuracy: 30');
-      camera.setAttribute('rotation-reader', '');
-      camera.setAttribute('look-controls', 'pointerLockEnabled: false');
+      camera.setAttribute('look-controls', 'enabled: true');
       camera.setAttribute('position', '0 1.6 0');
       scene.appendChild(camera);
       cameraRef.current = camera;
