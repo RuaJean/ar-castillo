@@ -2,30 +2,32 @@
   width: 100%;
   height: 100vh;
   position: relative;
-  overflow: hidden;
+  overflow: auto;
   background-color: #f0f0f0;
 }
 
 /* Pantalla de solicitud de permisos (mejorada) */
 .geo-ar-permission {
-  position: absolute;
+  position: relative;
   width: 100%;
-  height: 100%;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
   padding: 20px;
   background-color: #f9f9f9;
   text-align: center;
+  overflow-y: auto;
+  padding-top: 40px;
 }
 
 .geo-ar-title {
-  font-size: 2rem;
+  font-size: 1.8rem;
   color: #2c3e50;
-  margin-bottom: 25px;
+  margin-bottom: 20px;
   border-bottom: 2px solid #3498db;
-  padding-bottom: 8px;
+  padding-bottom: 6px;
   text-transform: uppercase;
   letter-spacing: 1px;
 }
@@ -34,14 +36,14 @@
 .geo-ar-config-container {
   display: flex;
   flex-direction: column;
-  gap: 25px;
+  gap: 18px;
   background-color: white;
-  padding: 25px;
+  padding: 20px;
   border-radius: 12px;
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.07);
   width: 100%;
   max-width: 600px;
-  margin-bottom: 25px;
+  margin-bottom: 20px;
 }
 
 .geo-ar-config-section {
@@ -49,9 +51,9 @@
 }
 
 .geo-ar-section-title {
-  font-size: 1.3rem;
+  font-size: 1.2rem;
   color: #2c3e50;
-  margin-bottom: 15px;
+  margin-bottom: 12px;
   border-left: 4px solid #3498db;
   padding-left: 10px;
 }
@@ -97,12 +99,12 @@
 .geo-ar-location-options {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-bottom: 15px;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
 .geo-ar-option {
-  padding: 8px 0;
+  padding: 5px 0;
 }
 
 .geo-ar-radio-label {
@@ -131,8 +133,8 @@
   display: flex;
   gap: 15px;
   flex-wrap: wrap;
-  margin-top: 10px;
-  padding: 15px;
+  margin-top: 8px;
+  padding: 12px;
   background-color: #f7f9fa;
   border-radius: 8px;
   animation: fadeIn 0.3s ease;
@@ -152,12 +154,12 @@
   display: block;
   font-size: 0.9rem;
   color: #7f8c8d;
-  margin-bottom: 5px;
+  margin-bottom: 4px;
 }
 
 .geo-ar-input {
   width: 100%;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border: 1px solid #ddd;
   border-radius: 6px;
   font-size: 16px;
@@ -177,10 +179,10 @@
 /* Notificación de requisitos */
 .geo-ar-notice {
   background-color: #e3f2fd;
-  padding: 15px;
+  padding: 12px;
   border-radius: 8px;
   border-left: 4px solid #3498db;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
   text-align: left;
   max-width: 600px;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
@@ -195,20 +197,20 @@
 .geo-ar-gps-notice {
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 12px;
 }
 
 .geo-ar-gps-notice img {
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
 }
 
 /* Estado del permiso */
 .geo-ar-permission-status {
   background-color: #f8f9fa;
-  padding: 10px 15px;
+  padding: 8px 12px;
   border-radius: 8px;
-  margin: 15px 0;
+  margin: 12px 0;
   font-size: 0.9rem;
   max-width: 600px;
   border: 1px solid #e9ecef;
@@ -221,9 +223,9 @@
 /* Instrucciones móviles */
 .geo-ar-mobile-instructions {
   background-color: #fff8e6;
-  padding: 15px 20px;
+  padding: 12px 16px;
   border-radius: 8px;
-  margin: 15px 0;
+  margin: 12px 0;
   max-width: 600px;
   text-align: left;
   border-left: 4px solid #f39c12;
@@ -233,8 +235,8 @@
 .geo-ar-mobile-instructions h4 {
   margin-top: 0;
   color: #f39c12;
-  font-size: 1rem;
-  margin-bottom: 10px;
+  font-size: 0.95rem;
+  margin-bottom: 8px;
 }
 
 .geo-ar-mobile-instructions ol {
@@ -243,7 +245,7 @@
 }
 
 .geo-ar-mobile-instructions li {
-  margin-bottom: 5px;
+  margin-bottom: 3px;
   color: #34495e;
 }
 
@@ -251,7 +253,7 @@
 .geo-ar-action-buttons {
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  gap: 12px;
   width: 100%;
   max-width: 600px;
 }
@@ -260,10 +262,10 @@
   background-color: #3498db;
   color: white;
   border: none;
-  padding: 14px 24px;
+  padding: 12px 20px;
   border-radius: 8px;
   font-weight: bold;
-  font-size: 1.1rem;
+  font-size: 1rem;
   cursor: pointer;
   box-shadow: 0 4px 6px rgba(52, 152, 219, 0.3);
   transition: all 0.2s ease;
@@ -286,7 +288,7 @@
 
 .geo-ar-secondary-buttons {
   display: flex;
-  gap: 15px;
+  gap: 12px;
   justify-content: center;
   flex-wrap: wrap;
 }
@@ -295,10 +297,10 @@
   background-color: #ecf0f1;
   color: #34495e;
   border: none;
-  padding: 12px 20px;
+  padding: 10px 18px;
   border-radius: 8px;
   font-weight: bold;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   cursor: pointer;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   transition: all 0.2s ease;
@@ -323,11 +325,11 @@
 }
 
 .geo-ar-reset-btn {
-  margin-top: 15px;
+  margin-top: 12px;
   background-color: #e74c3c;
   color: white;
   border: none;
-  padding: 10px 16px;
+  padding: 8px 14px;
   border-radius: 8px;
   font-weight: bold;
   cursor: pointer;
@@ -345,6 +347,61 @@
   background-color: #c0392b;
   transform: translateY(-2px);
   box-shadow: 0 4px 6px rgba(231, 76, 60, 0.4);
+}
+
+/* Nuevos ajustes para pantallas medianas (entre tablet y desktop) */
+@media (min-height: 700px) and (max-height: 900px) {
+  .geo-ar-permission {
+    justify-content: flex-start;
+    padding-top: 30px;
+  }
+  
+  .geo-ar-config-container {
+    gap: 15px;
+  }
+  
+  .geo-ar-title {
+    margin-bottom: 15px;
+  }
+}
+
+/* Ajustes específicos para pantallas más pequeñas en altura */
+@media (max-height: 700px) {
+  .geo-ar-permission {
+    justify-content: flex-start;
+    padding-top: 20px;
+  }
+  
+  .geo-ar-title {
+    font-size: 1.5rem;
+    margin-bottom: 12px;
+  }
+  
+  .geo-ar-config-container {
+    gap: 12px;
+    padding: 15px;
+  }
+  
+  .geo-ar-section-title {
+    font-size: 1.1rem;
+    margin-bottom: 8px;
+  }
+  
+  .geo-ar-manual-coords {
+    padding: 10px;
+  }
+  
+  .geo-ar-action-buttons {
+    gap: 10px;
+  }
+  
+  .geo-ar-primary-btn {
+    padding: 10px 16px;
+  }
+  
+  .geo-ar-secondary-btn {
+    padding: 8px 14px;
+  }
 }
 
 /* Responsive para dispositivos móviles */
