@@ -355,7 +355,10 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       const entity = document.createElement('a-entity');
       entity.setAttribute('id', 'main-model');
       entity.setAttribute('gltf-model', selectedModel);
-      entity.setAttribute('scale', '1 1 1');
+      // Ajustar la escala para que resulte más realista (1 unidad = 1 m en AR.js)
+      // El carro era muy pequeño, lo ampliamos
+      const defaultScale = selectedModel.includes('/models/car.glb') ? '8 8 8' : '3 3 3';
+      entity.setAttribute('scale', defaultScale);
       // Sin posición/rotación manual: lo maneja AR.js
       modelContainer.appendChild(entity);
       modelEntityRef.current = entity;
@@ -490,8 +493,7 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       resetButton.addEventListener('click', () => {
         // Reiniciar la posición de la cámara y el modelo
         cameraRef.current.setAttribute('gps-projected-camera', 'gpsMinAccuracy: 50; gpsMinDistance: 0; gpsTimeInterval: 100');
-        modelContainer.setAttribute('position', '0 0 0');
-        console.log('[GeoAR] Posición reiniciada');
+        // No modificamos la posición relativa del contenedor para no romper el anclaje GPS
         infoPanel.innerHTML = useManualCoords 
           ? `Posición reiniciada. Modelo en: Lat ${modelPosition.latitude.toFixed(6)}, Lon ${modelPosition.longitude.toFixed(6)}`
           : 'Posición reiniciada. ¡Comienza a caminar!';
