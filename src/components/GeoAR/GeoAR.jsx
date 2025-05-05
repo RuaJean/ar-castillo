@@ -335,7 +335,7 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       const scene = document.createElement('a-scene');
       scene.setAttribute('embedded', '');
       // Usar configuración mejorada de AR.js para mejor seguimiento de posición
-      scene.setAttribute('arjs', 'sourceType: webcam; debugUIEnabled: false; trackingMethod: best;');
+      scene.setAttribute('arjs', 'sourceType: webcam; debugUIEnabled: true; trackingMethod: best;');
       scene.setAttribute('vr-mode-ui', 'enabled: false');
       arContainer.appendChild(scene);
 
@@ -363,7 +363,7 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       const entity = document.createElement('a-entity');
       entity.setAttribute('id', 'main-model');
       entity.setAttribute('gltf-model', selectedModel);
-      entity.setAttribute('scale', '15 15 15'); // Tamaño aumentado para mejor visibilidad
+      entity.setAttribute('scale', '1 1 1');
       entity.setAttribute('position', '0 0 0');
       entity.setAttribute('rotation', '0 0 0');
       modelContainer.appendChild(entity);
