@@ -47,7 +47,51 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
 
   // Función para solicitar la ubicación usando getCurrentPosition con mayor detalle en el error
   const requestGeolocation = () => {
-    console.log('[GeoAR] Solicitando geolocalización...');
+    console.log('[GeoAR] Solicitud de experiencia AR iniciada...');
+    
+    // Si el usuario eligió coordenadas manuales, usarlas directamente
+    if (useManualCoords) {
+      // Validar los datos de entrada
+      const lat = parseFloat(manualLatitude);
+      const lon = parseFloat(manualLongitude);
+      
+      if (isNaN(lat) || isNaN(lon) || !manualLatitude || !manualLongitude) {
+        setError('Por favor, introduce coordenadas numéricas válidas de latitud y longitud.');
+        setStage('error');
+        return;
+      }
+      
+      if (lat < -90 || lat > 90) {
+        setError('La latitud debe estar entre -90 y 90 grados.');
+        setStage('error');
+        return;
+      }
+      
+      if (lon < -180 || lon > 180) {
+        setError('La longitud debe estar entre -180 y 180 grados.');
+        setStage('error');
+        return;
+      }
+      
+      console.log('[GeoAR] Usando coordenadas manuales:', lat, lon);
+      setStage('requesting');
+      
+      // Simular un breve retraso para dar feedback visual
+      setTimeout(() => {
+        const manualCoords = {
+          latitude: lat,
+          longitude: lon
+        };
+        setCoords(manualCoords);
+        setStage('success');
+        console.log('[GeoAR] Experiencia iniciada con coordenadas manuales');
+      }, 1200);
+      
+      return;
+    }
+    
+    // Comprobaciones para la ubicación GPS
+    console.log('[GeoAR] Solicitando geolocalización GPS...');
     
     // Resetear permisos en móviles si están denegados
     if (navigator.userAgent.match(/Android|iPhone|iPad|iPod/i) && permissionStatus === 'denied') {
@@ -103,7 +147,6 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
         };
         setCoords(newCoords);
         setStage('success');
-        startPositionTracking(newCoords);
       },
       (err) => {
         console.error('[GeoAR] Error retrieving location:', err);
@@ -264,13 +307,17 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
     if (!coords) return;
     console.log('[GeoAR] Inicializando escena AR...');
     if (!arSceneRef.current) {
-      // Calcular una posición a 10 metros de distancia del usuario (rumbo norte)
-      const modelPosition = calculatePointAtDistance(
-        coords.latitude, 
-        coords.longitude, 
-        10, // 10 metros de distancia (reducido de 20m)
-        0   // Dirección norte (0 grados)
-      );
+      // Determinar coordenadas del modelo:
+      // - Si se usan coordenadas manuales, el modelo va exactamente en esas coordenadas
+      // - Si se usa GPS, el modelo se coloca a 10m del usuario en dirección norte
+      const modelPosition = useManualCoords 
+        ? { ...coords } // Usar exactamente las coordenadas especificadas
+        : calculatePointAtDistance(
+            coords.latitude, 
+            coords.longitude, 
+            10, // 10 metros de distancia (reducido de 20m)
+            0   // Dirección norte (0 grados)
+          );
       
       // Crear contenedor para la escena AR
       const arContainer = document.createElement('div');
@@ -354,7 +401,16 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       infoPanel.style.zIndex = '2500';
       infoPanel.style.textAlign = 'center';
       infoPanel.style.width = '80%';
-      infoPanel.innerHTML = 'Inicializando rastreo de movimiento...';
+      
+      if (useManualCoords) {
+        infoPanel.innerHTML = `
+          <div>Modelo posicionado en: Lat: ${modelPosition.latitude.toFixed(6)}, Lon: ${modelPosition.longitude.toFixed(6)}</div>
+          <div>Para ver el modelo, apunta con tu cámara en diferentes direcciones.</div>
+        `;
+      } else {
+        infoPanel.innerHTML = 'Inicializando rastreo de movimiento...';
+      }
+      
       arContainer.appendChild(infoPanel);
       
       // Inicializar el modelo en la posición fija basada en GPS
@@ -367,69 +423,89 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
           longitude: modelPosition.longitude
         };
         
-        // Configurar seguimiento continuo de GPS
+        // Configurar seguimiento continuo de GPS (solo si no usamos coordenadas manuales)
         if ('geolocation' in navigator) {
-          const watchId = navigator.geolocation.watchPosition(
-            (position) => {
-              try {
-                const currentLat = position.coords.latitude;
-                const currentLon = position.coords.longitude;
-                const heading = position.coords.heading;
-                
-                // Calcular diferencia en metros entre la posición actual y la anterior
-                const distNorth = (currentLat - lastLat) * 111111;
-                const distEast = (currentLon - lastLon) * 111111 * Math.cos(lastLat * Math.PI / 180);
-                
-                // Actualizar variables de seguimiento
-                lastLat = currentLat;
-                lastLon = currentLon;
-                
-                // Calcular nueva posición de cámara basada en el movimiento GPS
-                cameraWorldPosition.x += distEast;
-                cameraWorldPosition.z += distNorth;
-                
-                // Mover el contenedor del modelo en dirección opuesta al movimiento de la cámara
-                modelContainer.setAttribute('position', 
-                  `${-cameraWorldPosition.x} 0 ${-cameraWorldPosition.z}`);
-                
-                // Calcular distancia entre la posición actual y el modelo
-                const distanceToModel = calculateDistance(
-                  { latitude: currentLat, longitude: currentLon },
-                  initialModelPosition
-                );
-                
-                // Determinar si estamos dentro del modelo (aproximado, basado en distancia)
-                const isInsideModel = distanceToModel < 5; // Consideramos "dentro" si estamos a menos de 5m
-                
-                // Actualizar panel informativo
-                infoPanel.innerHTML = `
-                  <div>Distancia al modelo: ${distanceToModel.toFixed(1)}m</div>
-                  <div>Estado: ${isInsideModel ? '¡Estás DENTRO del modelo!' : 'Estás fuera del modelo'}</div>
-                  <div>Movimiento: ${Math.sqrt(distNorth*distNorth + distEast*distEast).toFixed(2)}m</div>
-                  <div style="font-size:10px">Lat: ${currentLat.toFixed(6)}, Lon: ${currentLon.toFixed(6)}</div>
-                `;
-                
-                // Actualizar estilo del panel según si estamos dentro o fuera
-                infoPanel.style.backgroundColor = isInsideModel ? 'rgba(46,204,113,0.8)' : 'rgba(0,0,0,0.7)';
-                
-                console.log(`[GeoAR] Movimiento: ${distNorth.toFixed(2)}m Norte, ${distEast.toFixed(2)}m Este, Distancia al modelo: ${distanceToModel.toFixed(2)}m`);
-              } catch (e) {
-                console.error('[GeoAR] Error procesando posición:', e);
+          // Establecer posición de la cámara (usuario) y del modelo
+          if (!useManualCoords) {
+            // Si usamos GPS, seguimos la posición del usuario y calculamos distancia al modelo
+            const watchId = navigator.geolocation.watchPosition(
+              (position) => {
+                try {
+                  const currentLat = position.coords.latitude;
+                  const currentLon = position.coords.longitude;
+                  const heading = position.coords.heading;
+                  
+                  // Calcular diferencia en metros entre la posición actual y la anterior
+                  const distNorth = (currentLat - lastLat) * 111111;
+                  const distEast = (currentLon - lastLon) * 111111 * Math.cos(lastLat * Math.PI / 180);
+                  
+                  // Actualizar variables de seguimiento
+                  lastLat = currentLat;
+                  lastLon = currentLon;
+                  
+                  // Calcular nueva posición de cámara basada en el movimiento GPS
+                  cameraWorldPosition.x += distEast;
+                  cameraWorldPosition.z += distNorth;
+                  
+                  // Mover el contenedor del modelo en dirección opuesta al movimiento de la cámara
+                  modelContainer.setAttribute('position', 
+                    `${-cameraWorldPosition.x} 0 ${-cameraWorldPosition.z}`);
+                  
+                  // Calcular distancia entre la posición actual y el modelo
+                  const distanceToModel = calculateDistance(
+                    { latitude: currentLat, longitude: currentLon },
+                    initialModelPosition
+                  );
+                  
+                  // Determinar si estamos dentro del modelo (aproximado, basado en distancia)
+                  const isInsideModel = distanceToModel < 5; // Consideramos "dentro" si estamos a menos de 5m
+                  
+                  // Actualizar panel informativo
+                  infoPanel.innerHTML = `
+                    <div>Distancia al modelo: ${distanceToModel.toFixed(1)}m</div>
+                    <div>Estado: ${isInsideModel ? '¡Estás DENTRO del modelo!' : 'Estás fuera del modelo'}</div>
+                    <div>Movimiento: ${Math.sqrt(distNorth*distNorth + distEast*distEast).toFixed(2)}m</div>
+                    <div style="font-size:10px">Lat: ${currentLat.toFixed(6)}, Lon: ${currentLon.toFixed(6)}</div>
+                  `;
+                  
+                  // Actualizar estilo del panel según si estamos dentro o fuera
+                  infoPanel.style.backgroundColor = isInsideModel ? 'rgba(46,204,113,0.8)' : 'rgba(0,0,0,0.7)';
+                  
+                  console.log(`[GeoAR] Movimiento: ${distNorth.toFixed(2)}m Norte, ${distEast.toFixed(2)}m Este, Distancia al modelo: ${distanceToModel.toFixed(2)}m`);
+                } catch (e) {
+                  console.error('[GeoAR] Error procesando posición:', e);
+                }
+              },
+              (err) => {
+                console.error('[GeoAR] Error en seguimiento GPS:', err);
+                infoPanel.innerHTML = `Error de GPS: ${err.message}`;
+                infoPanel.style.backgroundColor = 'rgba(231,76,60,0.8)';
+              },
+              { 
+                enableHighAccuracy: true, 
+                maximumAge: 0, 
+                timeout: 15000
               }
-            },
-            (err) => {
-              console.error('[GeoAR] Error en seguimiento GPS:', err);
-              infoPanel.innerHTML = `Error de GPS: ${err.message}`;
-              infoPanel.style.backgroundColor = 'rgba(231,76,60,0.8)';
-            },
-            { 
-              enableHighAccuracy: true, 
-              maximumAge: 0, 
-              timeout: 15000
+            );
+            
+            setGpsWatchId(watchId);
+          } else {
+            // Si usamos coordenadas manuales, actualizamos cada cierto tiempo el panel informativo
+            // con datos de orientación del dispositivo (si están disponibles)
+            if (window.DeviceOrientationEvent) {
+              window.addEventListener('deviceorientation', function(event) {
+                const alpha = event.alpha ? Math.round(event.alpha) : 'N/A';  // Z-axis rotation [0,360)
+                const beta = event.beta ? Math.round(event.beta) : 'N/A';    // X-axis rotation [-180,180)
+                const gamma = event.gamma ? Math.round(event.gamma) : 'N/A';  // Y-axis rotation [-90,90)
+                
+                infoPanel.innerHTML = `
+                  <div>Modelo en: Lat ${modelPosition.latitude.toFixed(6)}, Lon ${modelPosition.longitude.toFixed(6)}</div>
+                  <div>Orientación: α:${alpha}° β:${beta}° γ:${gamma}°</div>
+                  <div>Mueve tu dispositivo para explorar el modelo</div>
+                `;
+              });
             }
-          );
-          
-          setGpsWatchId(watchId);
+          }
         }
       });
       
@@ -452,7 +528,9 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
         cameraWorldPosition = { x: 0, y: 1.6, z: 0 };
         modelContainer.setAttribute('position', '0 0 0');
         console.log('[GeoAR] Posición reiniciada');
-        infoPanel.innerHTML = 'Posición reiniciada. ¡Comienza a caminar!';
+        infoPanel.innerHTML = useManualCoords 
+          ? `Posición reiniciada. Modelo en: Lat ${modelPosition.latitude.toFixed(6)}, Lon ${modelPosition.longitude.toFixed(6)}`
+          : 'Posición reiniciada. ¡Comienza a caminar!';
       });
       arContainer.appendChild(resetButton);
 
@@ -570,91 +648,114 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       {/* Pantalla inicial: Solicitud de permisos */}
       {stage === 'initial' && (
         <div className="geo-ar-permission">
-          <h2>AR Geolocalizado</h2>
-          <div className="model-selector">
-            <h3>1. Selecciona un modelo 3D:</h3>
-            <select
-              value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
-              className="geo-ar-model-select"
-            >
-              {availableModels.map((model, index) => (
-                <option key={index} value={model.path}>
-                  {model.name}
-                </option>
-              ))}
-            </select>
+          <h2 className="geo-ar-title">AR Geolocalizado</h2>
+          
+          {/* Contenedor principal de configuración */}
+          <div className="geo-ar-config-container">
+            {/* Selector de modelos 3D (mejorado) */}
+            <div className="geo-ar-config-section">
+              <h3 className="geo-ar-section-title">1. Selecciona un modelo 3D</h3>
+              <div className="geo-ar-select-wrapper">
+                <select
+                  value={selectedModel}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                  className="geo-ar-model-select"
+                >
+                  {availableModels.map((model, index) => (
+                    <option key={index} value={model.path}>
+                      {model.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Selector de ubicación (mejorado) */}
+            <div className="geo-ar-config-section">
+              <h3 className="geo-ar-section-title">2. Elige la ubicación del modelo</h3>
+              
+              <div className="geo-ar-location-options">
+                <div className="geo-ar-option">
+                  <label className="geo-ar-radio-label">
+                    <input
+                      type="radio"
+                      name="locationOption"
+                      checked={!useManualCoords}
+                      onChange={() => setUseManualCoords(false)}
+                    />
+                    <span>Usar mi ubicación GPS (el modelo aparecerá cerca)</span>
+                  </label>
+                </div>
+                
+                <div className="geo-ar-option">
+                  <label className="geo-ar-radio-label">
+                    <input
+                      type="radio"
+                      name="locationOption"
+                      checked={useManualCoords}
+                      onChange={() => setUseManualCoords(true)}
+                    />
+                    <span>Fijar coordenadas manualmente</span>
+                  </label>
+                </div>
+              </div>
+              
+              {useManualCoords && (
+                <div className="geo-ar-manual-coords">
+                  <div className="geo-ar-input-group">
+                    <label>Latitud</label>
+                    <input
+                      type="number"
+                      placeholder="Ej: 40.7128"
+                      value={manualLatitude}
+                      onChange={(e) => setManualLatitude(e.target.value)}
+                      step="any"
+                      className="geo-ar-input"
+                    />
+                  </div>
+                  <div className="geo-ar-input-group">
+                    <label>Longitud</label>
+                    <input
+                      type="number"
+                      placeholder="Ej: -74.0060"
+                      value={manualLongitude}
+                      onChange={(e) => setManualLongitude(e.target.value)}
+                      step="any"
+                      className="geo-ar-input"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="manual-coords-selector">
-            <h3>2. Elige la ubicación del modelo:</h3>
-            <label className="geo-ar-checkbox-label">
-              <input
-                type="checkbox"
-                checked={!useManualCoords}
-                onChange={(e) => setUseManualCoords(!e.target.checked)}
-              />
-              Usar mi ubicación GPS (el modelo aparecerá cerca)
-            </label>
-            <label className="geo-ar-checkbox-label">
-              <input
-                type="checkbox"
-                checked={useManualCoords}
-                onChange={(e) => setUseManualCoords(e.target.checked)}
-              />
-              Fijar coordenadas manualmente:
-            </label>
-            {useManualCoords && (
-              <div className="manual-coords-inputs">
-                <input
-                  type="number"
-                  placeholder="Latitud (ej: 40.7128)"
-                  value={manualLatitude}
-                  onChange={(e) => setManualLatitude(e.target.value)}
-                  step="any"
-                  className="geo-ar-coord-input"
+          {/* Notificación de requisitos */}
+          <div className="geo-ar-notice">
+            {useManualCoords ? (
+              <p>El modelo 3D se colocará en las coordenadas especificadas.</p>
+            ) : (
+              <div className="geo-ar-gps-notice">
+                <img
+                  src="https://cdn-icons-png.flaticon.com/512/684/684908.png"
+                  alt="GPS icon"
+                  className="geo-ar-location-icon"
                 />
-                <input
-                  type="number"
-                  placeholder="Longitud (ej: -74.0060)"
-                  value={manualLongitude}
-                  onChange={(e) => setManualLongitude(e.target.value)}
-                  step="any"
-                  className="geo-ar-coord-input"
-                />
+                <p>Esta experiencia requiere acceso a tu ubicación precisa para colocar el modelo cerca de ti.</p>
               </div>
             )}
           </div>
 
-          <p>
-            {useManualCoords
-              ? 'El modelo se colocará en las coordenadas especificadas.'
-              : 'Esta experiencia requiere acceso a tu ubicación precisa para colocar el modelo cerca de ti.'}
-          </p>
-
-          {!useManualCoords && (
-            <>
-              <img
-                src="https://cdn-icons-png.flaticon.com/512/684/684908.png"
-                alt="GPS icon"
-                className="geo-ar-location-icon"
-              />
-              {permissionStatus && (
-                <div className="geo-ar-permission-status">
-                  <p>Estado del permiso GPS: <strong>{getPermissionText()}</strong></p>
-                </div>
-              )}
-              <p className="geo-ar-instructions">
-                {permissionStatus === 'denied'
-                  ? 'Debes permitir el acceso a tu ubicación desde la configuración de tu navegador para continuar.'
-                  : 'Haz clic en "Iniciar Experiencia AR" para solicitar el acceso a tu ubicación.'}
-              </p>
-            </>
+          {/* Estado del permiso (solo si usa GPS) */}
+          {!useManualCoords && permissionStatus && (
+            <div className="geo-ar-permission-status">
+              <p>Estado del permiso GPS: <strong>{getPermissionText()}</strong></p>
+            </div>
           )}
-          
+
+          {/* Instrucciones móviles (solo si usa GPS) */}
           {!useManualCoords && (
-            <div className="mobile-instructions">
-              <p>En móviles (si usas GPS):</p>
+            <div className="geo-ar-mobile-instructions">
+              <h4>En dispositivos móviles:</h4>
               <ol>
                 <li>Abre ajustes del navegador</li>
                 <li>Habilita permisos de ubicación</li>
@@ -664,17 +765,34 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
             </div>
           )}
 
-          <button
-            onClick={requestGeolocation}
-            className="geo-ar-permission-btn"
-            disabled={!useManualCoords && permissionStatus === 'denied'}
-          >
-            Iniciar Experiencia AR
-          </button>
+          {/* Grupo de botones de acción (rediseñados) */}
+          <div className="geo-ar-action-buttons">
+            <button
+              onClick={requestGeolocation}
+              className="geo-ar-primary-btn"
+              disabled={!useManualCoords && permissionStatus === 'denied'}
+            >
+              Iniciar Experiencia AR
+            </button>
+            
+            <div className="geo-ar-secondary-buttons">
+              <button onClick={() => window.history.back()} className="geo-ar-secondary-btn">
+                Volver
+              </button>
+              
+              <button 
+                onClick={() => window.location.href = '/ar-fijo'} 
+                className="geo-ar-secondary-btn geo-ar-alt-btn"
+              >
+                Experiencia AR en Ubicación Fija
+              </button>
+            </div>
+          </div>
           
+          {/* Botón para reiniciar permisos (solo si están denegados) */}
           {permissionStatus === 'denied' && (
             <button 
-              className="geo-ar-settings-btn"
+              className="geo-ar-reset-btn"
               onClick={() => {
                 if (navigator.permissions && navigator.permissions.revoke) {
                   navigator.permissions.revoke({ name: 'geolocation' }).then(() => {
@@ -689,20 +807,6 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
               🔄 Reiniciar Permisos de Ubicación
             </button>
           )}
-          <button onClick={() => window.history.back()} className="geo-ar-back-btn">
-            Volver
-          </button>
-          
-          <button 
-            onClick={() => window.location.href = '/ar-fijo'} 
-            className="geo-ar-fixed-location-btn"
-            style={{
-              backgroundColor: '#4e9a06',
-              marginTop: '10px'
-            }}
-          >
-            Experiencia AR en Ubicación Fija
-          </button>
         </div>
       )}
 
