@@ -372,9 +372,14 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       // Crear la cámara
       const camera = document.createElement('a-entity');
       camera.setAttribute('id', 'camera');
-      // Usar gps-projected-camera para manejar la posición basada en GPS
-      camera.setAttribute('gps-projected-camera', 'gpsMinAccuracy: 30'); // Puedes ajustar gpsMinAccuracy
-      // camera.setAttribute('position', '0 1.6 0'); // La posición Y puede ser necesaria para ajustar la altura
+      // Declarar explícitamente la cámara para que A-Frame no inserte una cámara por defecto
+      camera.setAttribute('camera', 'active: true');
+      // Componente de AR.js que actualiza la posición vía GPS/sensores
+      camera.setAttribute('gps-projected-camera', 'gpsMinAccuracy: 30');
+      // Altura estándar aproximada de los ojos del usuario
+      camera.setAttribute('position', '0 1.6 0');
+      // Habilitar controles de orientación del dispositivo
+      camera.setAttribute('look-controls', 'enabled: true');
       scene.appendChild(camera);
       cameraRef.current = camera;
       
