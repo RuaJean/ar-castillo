@@ -490,8 +490,62 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
             
             setGpsWatchId(watchId);
           } else {
-            // Si usamos coordenadas manuales, actualizamos cada cierto tiempo el panel informativo
-            // con datos de orientación del dispositivo (si están disponibles)
+            // Si usamos coordenadas manuales, primero obtenemos la posición actual del usuario para calcular
+            // la distancia real entre el usuario y el punto manual, y posicionar correctamente
+            navigator.geolocation.getCurrentPosition(
+              (position) => {
+                try {
+                  const userLat = position.coords.latitude;
+                  const userLon = position.coords.longitude;
+                  
+                  // Calcular distancia entre la posición del usuario y las coordenadas manuales del modelo
+                  const distanceToModel = calculateDistance(
+                    { latitude: userLat, longitude: userLon },
+                    initialModelPosition
+                  );
+                  
+                  // Calcular diferencia norte-sur y este-oeste para posicionar correctamente en AR
+                  const northDiff = (initialModelPosition.latitude - userLat) * 111111; // Diferencia norte en metros
+                  const eastDiff = (initialModelPosition.longitude - userLon) * 111111 * Math.cos(userLat * Math.PI / 180); // Diferencia este en metros
+                  
+                  console.log(`[GeoAR] Diferencia de posición: ${northDiff.toFixed(2)}m Norte, ${eastDiff.toFixed(2)}m Este`);
+                  
+                  // Colocar el modelo a la distancia y dirección correctas desde la posición del usuario
+                  modelContainer.setAttribute('position', `${eastDiff} 0 ${northDiff}`);
+                  
+                  // Actualizar panel informativo con la distancia correcta
+                  infoPanel.innerHTML = `
+                    <div>Distancia real al modelo: ${distanceToModel.toFixed(1)}m</div>
+                    <div>Modelo en: Lat ${initialModelPosition.latitude.toFixed(6)}, Lon ${initialModelPosition.longitude.toFixed(6)}</div>
+                    <div>Tu posición: Lat ${userLat.toFixed(6)}, Lon ${userLon.toFixed(6)}</div>
+                    <div>Orientación: Mueve tu dispositivo para ver el modelo</div>
+                  `;
+                  
+                  // Determinar si estamos dentro del modelo (aproximado, basado en distancia)
+                  const isInsideModel = distanceToModel < 5; // Consideramos "dentro" si estamos a menos de 5m
+                  infoPanel.style.backgroundColor = isInsideModel ? 'rgba(46,204,113,0.8)' : 'rgba(0,0,0,0.7)';
+                  
+                } catch (e) {
+                  console.error('[GeoAR] Error procesando posición inicial para coordenadas manuales:', e);
+                  infoPanel.innerHTML = `Error: ${e.message}`;
+                }
+              },
+              (err) => {
+                console.error('[GeoAR] Error obteniendo posición inicial del usuario:', err);
+                infoPanel.innerHTML = `Error obteniendo tu ubicación actual: ${err.message}. 
+                  El modelo se mostrará en dirección norte a 10m de distancia por defecto.`;
+                
+                // Si hay error, colocar el modelo a una distancia predeterminada (10m al norte)
+                modelContainer.setAttribute('position', '0 0 -10');
+              },
+              { 
+                enableHighAccuracy: true, 
+                maximumAge: 0, 
+                timeout: 15000
+              }
+            );
+            
+            // También seguimos monitoreando la orientación del dispositivo
             if (window.DeviceOrientationEvent) {
               window.addEventListener('deviceorientation', function(event) {
                 const alpha = event.alpha ? Math.round(event.alpha) : 'N/A';  // Z-axis rotation [0,360)
