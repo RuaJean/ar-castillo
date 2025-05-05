@@ -16,7 +16,8 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
   const availableModels = [
     { name: 'Oro', path: 'https://jeanrua.com/models/oro.glb' },
     { name: 'Santa María (Actual)', path: 'https://jeanrua.com/models/SantaMaria_actual.glb' },
-    { name: 'Santa María (Futuro)', path: 'https://jeanrua.com/models/SantaMaria_futuro.glb' }
+    { name: 'Santa María (Futuro)', path: 'https://jeanrua.com/models/SantaMaria_futuro.glb' },
+    { name: 'Carro', path: '/models/car.glb' } // Nuevo modelo local
   ];
 
   // Refs para la escena AR y elementos relacionados
@@ -364,7 +365,7 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       camera.setAttribute('id', 'camera');
       camera.setAttribute(
         'gps-projected-camera',
-        'gpsMinAccuracy: 30; gpsMinDistance: 0.3; gpsTimeInterval: 500'
+        'gpsMinAccuracy: 50; gpsMinDistance: 0; gpsTimeInterval: 100'
       );
       camera.setAttribute('camera', 'active: true');
       camera.setAttribute('look-controls', 'enabled: true');
@@ -485,7 +486,7 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       resetButton.style.borderRadius = '4px';
       resetButton.addEventListener('click', () => {
         // Reiniciar la posición de la cámara y el modelo
-        cameraRef.current.setAttribute('gps-projected-camera', 'gpsMinAccuracy: 30');
+        cameraRef.current.setAttribute('gps-projected-camera', 'gpsMinAccuracy: 50; gpsMinDistance: 0; gpsTimeInterval: 100');
         modelContainer.setAttribute('position', '0 0 0');
         console.log('[GeoAR] Posición reiniciada');
         infoPanel.innerHTML = useManualCoords 
