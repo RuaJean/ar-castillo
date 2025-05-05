@@ -401,9 +401,30 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       scene.addEventListener('loaded', () => {
         console.log('[GeoAR] Escena AR cargada correctamente');
         
-        // Colocar el modelo en su posición inicial en la escena
-        // Guardamos las coordenadas objetivo para calcular distancia en el panel informativo
-        initialModelPosition = { latitude: modelPosition.latitude, longitude: modelPosition.longitude };
+        // Si usamos GPS (no coordenadas manuales), esperamos la primera lectura
+        // precisa del componente gps-camera para anclar el modelo EXACTAMENTE allí
+        if (!useManualCoords) {
+          const handleFirstCamPos = (ev) => {
+            const lat = ev.detail.position.latitude;
+            const lon = ev.detail.position.longitude;
+            const acc = ev.detail.position.accuracy;
+            console.log(`[GeoAR] Primera lectura gps-camera lat:${lat} lon:${lon} acc:${acc}`);
+
+            // Solo anclamos si la precisión es razonable (< 30-40 m)
+            if (acc && acc > 40) return; // esperar siguiente lectura mejor
+
+            modelContainer.setAttribute('gps-entity-place', `latitude: ${lat}; longitude: ${lon}`);
+            initialModelPosition = { latitude: lat, longitude: lon };
+
+            // Retirar listener para que no cambie nunca más
+            scene.removeEventListener('gps-camera-update-position', handleFirstCamPos);
+          };
+          // Listener sobre la escena (gps-camera lanza el evento)
+          scene.addEventListener('gps-camera-update-position', handleFirstCamPos);
+        } else {
+          // Coordenadas manuales: ya las tenemos
+          initialModelPosition = { latitude: modelPosition.latitude, longitude: modelPosition.longitude };
+        }
         
         // Una vez la escena AR está lista, ocultamos la pantalla de carga
         setStage('started');
