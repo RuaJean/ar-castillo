@@ -335,15 +335,10 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       // Crear la escena A-Frame
       const scene = document.createElement('a-scene');
       scene.setAttribute('embedded', '');
-      // Usar configuración mejorada de AR.js para mejor seguimiento de posición
-      scene.setAttribute('arjs', 'sourceType: webcam; debugUIEnabled: true; trackingMethod: best;');
+      // Configuración mínima de AR.js: orientación por brújula, sin UI debug
+      scene.setAttribute('arjs', 'sourceType: webcam; orientationBase: compass; gpsMinDistance: 0; debugUIEnabled: false;');
       scene.setAttribute('vr-mode-ui', 'enabled: false');
       arContainer.appendChild(scene);
-
-      // Añadir entorno para mejor percepción de profundidad
-      const environment = document.createElement('a-entity');
-      environment.setAttribute('id', 'environment');
-      scene.appendChild(environment);
 
       // Crear el contenedor para el modelo
       const modelContainer = document.createElement('a-entity');
@@ -355,26 +350,21 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       const entity = document.createElement('a-entity');
       entity.setAttribute('id', 'main-model');
       entity.setAttribute('gltf-model', selectedModel);
+      // Tamaño real del carro ~1.7 x 0.8 x 3.7 m → usamos escala 1
       entity.setAttribute('scale', '1 1 1');
-      // Sin posición/rotación manual: lo maneja AR.js
       modelContainer.appendChild(entity);
       modelEntityRef.current = entity;
 
       // Crear la cámara
-      const camera = document.createElement('a-entity');
-      camera.setAttribute('id', 'camera');
-      camera.setAttribute(
-        'gps-projected-camera',
-        'gpsMinAccuracy: 50; gpsMinDistance: 0; gpsTimeInterval: 100'
-      );
-      camera.setAttribute('camera', 'active: true');
-      camera.setAttribute('look-controls', 'enabled: true');
+      const camera = document.createElement('a-camera');
+      camera.setAttribute('gps-camera', 'gpsMinDistance: 0');
+      camera.setAttribute('rotation-reader', '');
       camera.setAttribute('position', '0 1.6 0');
       scene.appendChild(camera);
       cameraRef.current = camera;
       
-      // Establecer la posición GPS del contenedor del modelo
-      modelContainer.setAttribute('gps-projected-entity-place', 
+      // Establecer la posición GPS del modelo (sin proyección)
+      modelContainer.setAttribute('gps-entity-place', 
         `latitude: ${modelPosition.latitude}; longitude: ${modelPosition.longitude}`
       );
       
@@ -564,20 +554,6 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       arContainer.appendChild(modelSelector);
 
       console.log('[GeoAR] Escena AR configurada con éxito.');
-
-      // Ajuste dinámico de escala según distancia para una sensación más natural
-      const BASE_SCALE = 1; // Escala base cuando el usuario está a 1 m del modelo
-
-      // AR.js lanza este evento cada vez que recalcula la posición del modelo
-      modelContainer.addEventListener('gps-entity-place-update-position', (e) => {
-        const { distance } = e.detail; // Distancia en metros entre la cámara y el modelo
-        if (!distance || distance <= 0) return;
-
-        // Factor de escala inversamente proporcional (capado a 1 = tamaño real)
-        const scaleFactor = Math.min(1, 10 / distance); // A 10 m → 1/10 del tamaño; a 1 m → tamaño real
-        const newScale = BASE_SCALE * scaleFactor;
-        entity.setAttribute('scale', `${newScale} ${newScale} ${newScale}`);
-      });
     }
   };
 
