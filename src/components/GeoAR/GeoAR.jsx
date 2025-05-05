@@ -372,19 +372,20 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       // Crear la cámara
       const camera = document.createElement('a-entity');
       camera.setAttribute('id', 'camera');
-      camera.setAttribute('camera', '');
-      camera.setAttribute('position', '0 1.6 0');
-      camera.setAttribute('wasd-controls', 'acceleration: 100');
-      camera.setAttribute('look-controls', '');
+      // Usar gps-projected-camera para manejar la posición basada en GPS
+      camera.setAttribute('gps-projected-camera', 'gpsMinAccuracy: 30'); // Puedes ajustar gpsMinAccuracy
+      // camera.setAttribute('position', '0 1.6 0'); // La posición Y puede ser necesaria para ajustar la altura
       scene.appendChild(camera);
       cameraRef.current = camera;
       
-      console.log('[GeoAR] Modelo 3D y cámara configurados');
+      // Establecer la posición GPS del contenedor del modelo
+      modelContainer.setAttribute('gps-projected-entity-place', 
+        `latitude: ${modelPosition.latitude}; longitude: ${modelPosition.longitude}`
+      );
       
-      // Variables para seguimiento de la posición
-      let lastLat = coords.latitude;
-      let lastLon = coords.longitude;
-      let cameraWorldPosition = { x: 0, y: 1.6, z: 0 };
+      console.log(`[GeoAR] Contenedor del modelo (${modelContainer.id}) configurado para lat: ${modelPosition.latitude}, lon: ${modelPosition.longitude}`);
+      console.log('[GeoAR] Cámara configurada con gps-projected-camera');
+      
       let initialModelPosition = null;
       
       // Mostrar panel de información
@@ -418,148 +419,59 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
         console.log('[GeoAR] Escena AR cargada correctamente');
         
         // Colocar el modelo en su posición inicial en la escena
-        initialModelPosition = {
-          latitude: modelPosition.latitude,
-          longitude: modelPosition.longitude
-        };
+        // Guardamos las coordenadas objetivo para calcular distancia en el panel informativo
+        initialModelPosition = { latitude: modelPosition.latitude, longitude: modelPosition.longitude };
         
         // Configurar seguimiento continuo de GPS (solo si no usamos coordenadas manuales)
         if ('geolocation' in navigator) {
           // Establecer posición de la cámara (usuario) y del modelo
-          if (!useManualCoords) {
-            // Si usamos GPS, seguimos la posición del usuario y calculamos distancia al modelo
-            const watchId = navigator.geolocation.watchPosition(
-              (position) => {
-                try {
-                  const currentLat = position.coords.latitude;
-                  const currentLon = position.coords.longitude;
-                  const heading = position.coords.heading;
-                  
-                  // Calcular diferencia en metros entre la posición actual y la anterior
-                  const distNorth = (currentLat - lastLat) * 111111;
-                  const distEast = (currentLon - lastLon) * 111111 * Math.cos(lastLat * Math.PI / 180);
-                  
-                  // Actualizar variables de seguimiento
-                  lastLat = currentLat;
-                  lastLon = currentLon;
-                  
-                  // Calcular nueva posición de cámara basada en el movimiento GPS
-                  cameraWorldPosition.x += distEast;
-                  cameraWorldPosition.z += distNorth;
-                  
-                  // Mover el contenedor del modelo en dirección opuesta al movimiento de la cámara
-                  modelContainer.setAttribute('position', 
-                    `${-cameraWorldPosition.x} 0 ${-cameraWorldPosition.z}`);
-                  
-                  // Calcular distancia entre la posición actual y el modelo
-                  const distanceToModel = calculateDistance(
-                    { latitude: currentLat, longitude: currentLon },
-                    initialModelPosition
-                  );
-                  
-                  // Determinar si estamos dentro del modelo (aproximado, basado en distancia)
-                  const isInsideModel = distanceToModel < 5; // Consideramos "dentro" si estamos a menos de 5m
-                  
-                  // Actualizar panel informativo
-                  infoPanel.innerHTML = `
-                    <div>Distancia al modelo: ${distanceToModel.toFixed(1)}m</div>
-                    <div>Estado: ${isInsideModel ? '¡Estás DENTRO del modelo!' : 'Estás fuera del modelo'}</div>
-                    <div>Movimiento: ${Math.sqrt(distNorth*distNorth + distEast*distEast).toFixed(2)}m</div>
-                    <div style="font-size:10px">Lat: ${currentLat.toFixed(6)}, Lon: ${currentLon.toFixed(6)}</div>
-                  `;
-                  
-                  // Actualizar estilo del panel según si estamos dentro o fuera
-                  infoPanel.style.backgroundColor = isInsideModel ? 'rgba(46,204,113,0.8)' : 'rgba(0,0,0,0.7)';
-                  
-                  console.log(`[GeoAR] Movimiento: ${distNorth.toFixed(2)}m Norte, ${distEast.toFixed(2)}m Este, Distancia al modelo: ${distanceToModel.toFixed(2)}m`);
-                } catch (e) {
-                  console.error('[GeoAR] Error procesando posición:', e);
-                }
-              },
-              (err) => {
-                console.error('[GeoAR] Error en seguimiento GPS:', err);
-                infoPanel.innerHTML = `Error de GPS: ${err.message}`;
-                infoPanel.style.backgroundColor = 'rgba(231,76,60,0.8)';
-              },
-              { 
-                enableHighAccuracy: true, 
-                maximumAge: 0, 
-                timeout: 15000
-              }
-            );
-            
-            setGpsWatchId(watchId);
-          } else {
-            // Si usamos coordenadas manuales, primero obtenemos la posición actual del usuario para calcular
-            // la distancia real entre el usuario y el punto manual, y posicionar correctamente
-            navigator.geolocation.getCurrentPosition(
-              (position) => {
-                try {
-                  const userLat = position.coords.latitude;
-                  const userLon = position.coords.longitude;
-                  
-                  // Calcular distancia entre la posición del usuario y las coordenadas manuales del modelo
-                  const distanceToModel = calculateDistance(
-                    { latitude: userLat, longitude: userLon },
-                    initialModelPosition
-                  );
-                  
-                  // Calcular diferencia norte-sur y este-oeste para posicionar correctamente en AR
-                  const northDiff = (initialModelPosition.latitude - userLat) * 111111; // Diferencia norte en metros
-                  const eastDiff = (initialModelPosition.longitude - userLon) * 111111 * Math.cos(userLat * Math.PI / 180); // Diferencia este en metros
-                  
-                  console.log(`[GeoAR] Diferencia de posición: ${northDiff.toFixed(2)}m Norte, ${eastDiff.toFixed(2)}m Este`);
-                  
-                  // Colocar el modelo a la distancia y dirección correctas desde la posición del usuario
-                  modelContainer.setAttribute('position', `${eastDiff} 0 ${northDiff}`);
-                  
-                  // Actualizar panel informativo con la distancia correcta
-                  infoPanel.innerHTML = `
-                    <div>Distancia real al modelo: ${distanceToModel.toFixed(1)}m</div>
-                    <div>Modelo en: Lat ${initialModelPosition.latitude.toFixed(6)}, Lon ${initialModelPosition.longitude.toFixed(6)}</div>
-                    <div>Tu posición: Lat ${userLat.toFixed(6)}, Lon ${userLon.toFixed(6)}</div>
-                    <div>Orientación: Mueve tu dispositivo para ver el modelo</div>
-                  `;
-                  
-                  // Determinar si estamos dentro del modelo (aproximado, basado en distancia)
-                  const isInsideModel = distanceToModel < 5; // Consideramos "dentro" si estamos a menos de 5m
-                  infoPanel.style.backgroundColor = isInsideModel ? 'rgba(46,204,113,0.8)' : 'rgba(0,0,0,0.7)';
-                  
-                } catch (e) {
-                  console.error('[GeoAR] Error procesando posición inicial para coordenadas manuales:', e);
-                  infoPanel.innerHTML = `Error: ${e.message}`;
-                }
-              },
-              (err) => {
-                console.error('[GeoAR] Error obteniendo posición inicial del usuario:', err);
-                infoPanel.innerHTML = `Error obteniendo tu ubicación actual: ${err.message}. 
-                  El modelo se mostrará en dirección norte a 10m de distancia por defecto.`;
-                
-                // Si hay error, colocar el modelo a una distancia predeterminada (10m al norte)
-                modelContainer.setAttribute('position', '0 0 -10');
-              },
-              { 
-                enableHighAccuracy: true, 
-                maximumAge: 0, 
-                timeout: 15000
-              }
-            );
-            
-            // También seguimos monitoreando la orientación del dispositivo
-            if (window.DeviceOrientationEvent) {
-              window.addEventListener('deviceorientation', function(event) {
-                const alpha = event.alpha ? Math.round(event.alpha) : 'N/A';  // Z-axis rotation [0,360)
-                const beta = event.beta ? Math.round(event.beta) : 'N/A';    // X-axis rotation [-180,180)
-                const gamma = event.gamma ? Math.round(event.gamma) : 'N/A';  // Y-axis rotation [-90,90)
-                
+          // El seguimiento ahora es principalmente para actualizar el panel de información
+          // AR.js maneja la posición relativa cámara-modelo con los componentes GPS
+          const watchId = navigator.geolocation.watchPosition(
+            (position) => {
+              try {
+                const currentLat = position.coords.latitude;
+                const currentLon = position.coords.longitude;
+                const heading = position.coords.heading; // Orientación del dispositivo
+
+                // Calcular distancia entre la posición actual y el modelo
+                const distanceToModel = calculateDistance(
+                  { latitude: currentLat, longitude: currentLon },
+                  initialModelPosition
+                );
+
+                // Determinar si estamos dentro del modelo
+                const isInsideModel = distanceToModel < 5;
+
+                // Actualizar panel informativo (unificado para ambos casos)
                 infoPanel.innerHTML = `
-                  <div>Modelo en: Lat ${modelPosition.latitude.toFixed(6)}, Lon ${modelPosition.longitude.toFixed(6)}</div>
-                  <div>Orientación: α:${alpha}° β:${beta}° γ:${gamma}°</div>
-                  <div>Mueve tu dispositivo para explorar el modelo</div>
+                  <div>Distancia al modelo: ${distanceToModel.toFixed(1)}m</div>
+                  <div>${isInsideModel ? '¡Estás DENTRO del modelo!' : 'Estás fuera del modelo'}</div>
+                  <div style="font-size:10px">Tu Pos: Lat ${currentLat.toFixed(6)}, Lon ${currentLon.toFixed(6)}</div>
+                  <div style="font-size:10px">Modelo en: Lat ${initialModelPosition.latitude.toFixed(6)}, Lon ${initialModelPosition.longitude.toFixed(6)}</div>
+                  ${heading !== null ? `<div>Orientación: ${Math.round(heading)}°</div>` : ''}
                 `;
-              });
+
+                infoPanel.style.backgroundColor = isInsideModel ? 'rgba(46,204,113,0.8)' : 'rgba(0,0,0,0.7)';
+
+                console.log(`[GeoAR] Posición GPS actualizada. Distancia al modelo: ${distanceToModel.toFixed(2)}m`);
+              } catch (e) {
+                console.error('[GeoAR] Error procesando posición:', e);
+              }
+            },
+            (err) => {
+              console.error('[GeoAR] Error en seguimiento GPS:', err);
+              infoPanel.innerHTML = `Error de GPS: ${err.message}`;
+              infoPanel.style.backgroundColor = 'rgba(231,76,60,0.8)';
+            },
+            {
+              enableHighAccuracy: true,
+              maximumAge: 0, // Obtener siempre la posición más reciente
+              timeout: 15000
             }
-          }
+          );
+
+          setGpsWatchId(watchId);
         }
       });
       
@@ -579,7 +491,7 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       resetButton.style.borderRadius = '4px';
       resetButton.addEventListener('click', () => {
         // Reiniciar la posición de la cámara y el modelo
-        cameraWorldPosition = { x: 0, y: 1.6, z: 0 };
+        cameraRef.current.setAttribute('gps-projected-camera', 'gpsMinAccuracy: 30');
         modelContainer.setAttribute('position', '0 0 0');
         console.log('[GeoAR] Posición reiniciada');
         infoPanel.innerHTML = useManualCoords 
