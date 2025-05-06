@@ -331,7 +331,7 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       const scene = document.createElement('a-scene');
       scene.setAttribute('embedded', '');
       // Configuración mínima de AR.js: orientación por brújula, sin UI debug
-      scene.setAttribute('arjs', 'sourceType: webcam; orientationBase: compass; gpsMinDistance: 0; debugUIEnabled: false;');
+      scene.setAttribute('arjs', 'sourceType: webcam; orientationBase: compass; trackingMethod: best; debugUIEnabled: false;');
       scene.setAttribute('vr-mode-ui', 'enabled: false');
       arContainer.appendChild(scene);
 
@@ -352,17 +352,14 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
 
       // Crear la cámara
       const camera = document.createElement('a-camera');
-      camera.setAttribute(
-        'gps-camera',
-        'gpsMinDistance: 1; gpsTimeInterval: 1000; gpsMinAccuracy: 30'
-      );
+      camera.setAttribute('gps-projected-camera', 'gpsMinDistance: 1; gpsTimeInterval: 1000; gpsMinAccuracy: 30');
       camera.setAttribute('rotation-reader', '');
       camera.setAttribute('position', '0 1.6 0');
       scene.appendChild(camera);
       cameraRef.current = camera;
       
       // Establecer la posición GPS del modelo (sin proyección)
-      modelContainer.setAttribute('gps-entity-place', 
+      modelContainer.setAttribute('gps-projected-entity-place', 
         `latitude: ${modelPosition.latitude}; longitude: ${modelPosition.longitude}`
       );
       
@@ -413,7 +410,7 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
             // Solo anclamos si la precisión es razonable (< 30-40 m)
             if (acc && acc > 40) return; // esperar siguiente lectura mejor
 
-            modelContainer.setAttribute('gps-entity-place', `latitude: ${lat}; longitude: ${lon}`);
+            modelContainer.setAttribute('gps-projected-entity-place', `latitude: ${lat}; longitude: ${lon}`);
             initialModelPosition = { latitude: lat, longitude: lon };
 
             // Retirar listener para que no cambie nunca más
