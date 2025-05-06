@@ -11,7 +11,13 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
   const [manualLatitude, setManualLatitude] = useState(''); // Nuevo estado
   const [manualLongitude, setManualLongitude] = useState(''); // Nuevo estado
   const [useManualCoords, setUseManualCoords] = useState(false); // Nuevo estado
+  const [anchorReady, setAnchorReady] = useState(false);
+  const [waitingFix, setWaitingFix] = useState(true);
   
+  // Umbrales
+  const REQUIRED_ACCURACY = 8;   // m
+  const ANCHOR_TIMEOUT = 10000;  // ms
+
   // Lista de modelos disponibles
   const availableModels = [
     { name: 'Oro', path: 'https://jeanrua.com/models/oro.glb' },
@@ -345,14 +351,14 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       const entity = document.createElement('a-entity');
       entity.setAttribute('id', 'main-model');
       entity.setAttribute('gltf-model', selectedModel);
-      // Tamaño real del carro ~1.7 x 0.8 x 3.7 m → usamos escala 1
-      entity.setAttribute('scale', '1 1 1');
+      entity.setAttribute('scale-compensation', 'enabled: true');
+      entity.setAttribute('scale', '1 1 1'); // dimensiones reales del coche
       modelContainer.appendChild(entity);
       modelEntityRef.current = entity;
 
       // Crear la cámara
       const camera = document.createElement('a-camera');
-      camera.setAttribute('gps-projected-camera', 'gpsMinDistance: 1; gpsTimeInterval: 1000; gpsMinAccuracy: 30');
+      camera.setAttribute('gps-projected-camera', 'gpsMinDistance: 2; gpsTimeInterval: 1000; gpsMinAccuracy: 30');
       camera.setAttribute('rotation-reader', '');
       camera.setAttribute('position', '0 1.6 0');
       scene.appendChild(camera);
@@ -432,35 +438,35 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
           // El seguimiento ahora es principalmente para actualizar el panel de información
           // AR.js maneja la posición relativa cámara-modelo con los componentes GPS
           const watchId = navigator.geolocation.watchPosition(
-            (position) => {
-              try {
-                const currentLat = position.coords.latitude;
-                const currentLon = position.coords.longitude;
-                const heading = position.coords.heading; // Orientación del dispositivo
+            (pos) => {
+              const { latitude, longitude, accuracy } = pos.coords;
 
-                // Calcular distancia entre la posición actual y el modelo
-                const distanceToModel = calculateDistance(
-                  { latitude: currentLat, longitude: currentLon },
+              // Mientras no tengamos ancla
+              if (!anchorReady) {
+                if (accuracy <= REQUIRED_ACCURACY) {
+                  // 1️⃣  anclamos aquí
+                  modelContainer.setAttribute(
+                    'gps-projected-entity-place',
+                    `latitude: ${latitude}; longitude: ${longitude}`
+                  );
+                  initialModelPosition = { latitude, longitude };
+                  setAnchorReady(true);
+                  setWaitingFix(false);
+                  console.log('[AR] Ancla GPS fijada a', latitude, longitude, 'acc', accuracy);
+                } else {
+                  console.log('[AR] Esperando mejor precisión…', accuracy);
+                }
+              }
+
+              // Filtrado Kalman + cálculo de distancia para el panel
+              if (anchorReady) {
+                kalmanLat.filter(latitude);
+                kalmanLon.filter(longitude);
+                const dist = calculateDistance(
+                  { latitude: kalmanLat.value, longitude: kalmanLon.value },
                   initialModelPosition
                 );
-
-                // Determinar si estamos dentro del modelo
-                const isInsideModel = distanceToModel < 5;
-
-                // Actualizar panel informativo (unificado para ambos casos)
-                infoPanel.innerHTML = `
-                  <div>Distancia al modelo: ${distanceToModel.toFixed(1)}m</div>
-                  <div>${isInsideModel ? '¡Estás DENTRO del modelo!' : 'Estás fuera del modelo'}</div>
-                  <div style="font-size:10px">Tu Pos: Lat ${currentLat.toFixed(6)}, Lon ${currentLon.toFixed(6)}</div>
-                  <div style="font-size:10px">Modelo en: Lat ${initialModelPosition.latitude.toFixed(6)}, Lon ${initialModelPosition.longitude.toFixed(6)}</div>
-                  ${heading !== null ? `<div>Orientación: ${Math.round(heading)}°</div>` : ''}
-                `;
-
-                infoPanel.style.backgroundColor = isInsideModel ? 'rgba(46,204,113,0.8)' : 'rgba(0,0,0,0.7)';
-
-                console.log(`[GeoAR] Posición GPS actualizada. Distancia al modelo: ${distanceToModel.toFixed(2)}m`);
-              } catch (e) {
-                console.error('[GeoAR] Error procesando posición:', e);
+                updateInfoPanel(dist, accuracy);
               }
             },
             (err) => {
@@ -470,8 +476,8 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
             },
             {
               enableHighAccuracy: true,
-              maximumAge: 0, // Obtener siempre la posición más reciente
-              timeout: 15000
+              maximumAge: 0,
+              timeout: 20000
             }
           );
 
