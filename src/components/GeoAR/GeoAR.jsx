@@ -339,6 +339,9 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
       // Configuración mínima de AR.js: orientación por brújula, sin UI debug
       scene.setAttribute('arjs', 'sourceType: webcam; orientationBase: compass; trackingMethod: best; debugUIEnabled: false;');
       scene.setAttribute('vr-mode-ui', 'enabled: false');
+      scene.setAttribute('webxr', 'requiredFeatures: hit-test, local-floor');
+      scene.setAttribute('renderer', 'logarithmicDepthBuffer: true');
+      scene.setAttribute('xr-mode-ui', 'enabled: true');
       arContainer.appendChild(scene);
 
       // Crear el contenedor para el modelo
