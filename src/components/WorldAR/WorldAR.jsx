@@ -53,32 +53,29 @@ const WorldAR = ({ defaultModel = '/models/car.glb' }) => {
     camera.setAttribute('look-controls', 'enabled: false');
     scene.appendChild(camera);
 
-    // Retícula que indica donde se puede colocar el modelo
-    const reticle = document.createElement('a-ring');
+    // Retícula + hit-test con creación automática de ANCHOR
+    const reticle = document.createElement('a-entity');
     reticle.setAttribute('id', 'reticle');
-    reticle.setAttribute('radius-inner', '0.05');
-    reticle.setAttribute('radius-outer', '0.06');
-    reticle.setAttribute('position', '0 0 -2');
-    reticle.setAttribute('rotation', '-90 0 0');
-    reticle.setAttribute('material', 'color: #FFC107; shader: flat; opacity: 0.8');
-    reticle.setAttribute('visible', 'false');
+    reticle.setAttribute('ar-hit-test', 'type: plane; anchor: true;');
+    // Añadimos una malla slim para visualizar el punto de impacto
+    const ring = document.createElement('a-ring');
+    ring.setAttribute('radius-inner', '0.05');
+    ring.setAttribute('radius-outer', '0.06');
+    ring.setAttribute('rotation', '-90 0 0');
+    ring.setAttribute('material', 'color: #FFC107; shader: flat; opacity: 0.8');
+    reticle.appendChild(ring);
     scene.appendChild(reticle);
 
-    // Hit-test componente sobre la retícula
-    reticle.setAttribute('ar-hit-test', '');
-
-    // Evento cuando hay resultado de hit-test
-    reticle.addEventListener('ar-hit-test-select', () => {
-      if (modelRef.current) return; // ya colocado
+    // Cuando el usuario toca la pantalla y se genera un anchor
+    reticle.addEventListener('ar-hit-test-anchor-set', (e) => {
+      if (modelRef.current) return;
+      const anchorEl = e.detail.anchorEl; // elemento que mantiene la matriz del anchor
       const m = document.createElement('a-entity');
       m.setAttribute('gltf-model', selectedModel);
       m.setAttribute('scale', '1 1 1');
-      // anclar exactamente donde está la retícula
-      const { x, y, z } = reticle.object3D.position;
-      m.setAttribute('position', `${x} ${y} ${z}`);
-      scene.appendChild(m);
+      anchorEl.appendChild(m); // El modelo hereda la matriz del anchor => sin saltos
       modelRef.current = m;
-      reticle.setAttribute('visible', 'false');
+      ring.setAttribute('visible', 'false');
     });
 
     document.body.appendChild(scene);
