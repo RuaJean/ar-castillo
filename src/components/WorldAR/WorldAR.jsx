@@ -8,62 +8,8 @@ const WorldAR = ({ defaultModel = '/models/car.glb' }) => {
   const [started, setStarted] = useState(false);
   const [selectedModel, setSelectedModel] = useState(defaultModel);
   const [error, setError] = useState(null);
-  const [debugInfo, setDebugInfo] = useState(null);
   const sceneRef = useRef(null);
   const modelRef = useRef(null);
-
-  // Detectar dispositivo y navegador al cargar
-  useEffect(() => {
-    const userAgent = navigator.userAgent;
-    const browserInfo = {
-      userAgent,
-      isIOS: /iPhone|iPad|iPod/.test(userAgent),
-      isSafari: /Safari/.test(userAgent) && !/Chrome/.test(userAgent),
-      isChrome: /Chrome/.test(userAgent),
-      webXRSupported: !!navigator.xr,
-      webXRVersion: navigator.xr ? "Soportado" : "No soportado"
-    };
-    
-    let webXRDetails = "WebXR no detectado";
-    
-    // Comprobar soporte específico de WebXR
-    if (navigator.xr) {
-      navigator.xr.isSessionSupported('immersive-ar')
-        .then(supported => {
-          browserInfo.immersiveARSupported = supported;
-          webXRDetails = supported ? "immersive-ar: Soportado" : "immersive-ar: No soportado";
-          
-          setDebugInfo({
-            ...browserInfo,
-            webXRDetails
-          });
-        })
-        .catch(err => {
-          browserInfo.immersiveARError = err.message;
-          webXRDetails = `Error al verificar immersive-ar: ${err.message}`;
-          
-          setDebugInfo({
-            ...browserInfo,
-            webXRDetails
-          });
-        });
-    } else {
-      let suggestion = "";
-      if (browserInfo.isIOS) {
-        if (parseInt(userAgent.match(/OS (\d+)_/)[1], 10) >= 17) {
-          suggestion = "Aunque tienes iOS 17+, WebXR podría requerir habilitar características experimentales. En Safari, ve a Ajustes > Safari > Funciones experimentales > Realidad Aumentada.";
-        } else {
-          suggestion = "WebXR requiere iOS 17+ con Safari. Por favor actualiza tu dispositivo.";
-        }
-      }
-      
-      setDebugInfo({
-        ...browserInfo,
-        webXRDetails,
-        suggestion
-      });
-    }
-  }, []);
 
   // Carga dinámica de A-Frame + módulo webxr-hit-test
   useEffect(() => {
@@ -98,7 +44,7 @@ const WorldAR = ({ defaultModel = '/models/car.glb' }) => {
   const buildScene = () => {
     const scene = document.createElement('a-scene');
     scene.setAttribute('renderer', 'colorManagement: true; physicallyCorrectLights: true; logarithmicDepthBuffer: true');
-    scene.setAttribute('webxr', 'requiredFeatures: hit-test; optionalFeatures: local-floor;');
+    scene.setAttribute('webxr', 'mode: ar; requiredFeatures: hit-test; optionalFeatures: local-floor;');
     scene.setAttribute('vr-mode-ui', 'enabled: false');
     scene.setAttribute('embedded', '');
 
@@ -136,54 +82,39 @@ const WorldAR = ({ defaultModel = '/models/car.glb' }) => {
     sceneRef.current = scene;
   };
 
-  const handleStart = () => {
-    if (!navigator.xr) {
-      setError('WebXR no soportado en este dispositivo/navegador');
+  const handleStart = async () => {
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    // 1) Comprobar contexto seguro (HTTPS o localhost)
+    if (!window.isSecureContext && location.hostname !== 'localhost') {
+      setError('WebXR sólo funciona sobre HTTPS. Accede mediante https:// o usa localhost durante el desarrollo.');
       return;
     }
-    setStarted(true);
-  };
 
-  const renderDebugPanel = () => {
-    if (!debugInfo) return null;
-    
-    return (
-      <div style={{ 
-        backgroundColor: 'rgba(0,0,0,0.8)', 
-        color: 'white', 
-        padding: '10px', 
-        borderRadius: '5px',
-        marginTop: '20px',
-        fontSize: '12px',
-        textAlign: 'left'
-      }}>
-        <h3 style={{ marginTop: '0', color: '#FFC107' }}>Información de Depuración:</h3>
-        <p>Navegador: {debugInfo.isSafari ? 'Safari' : debugInfo.isChrome ? 'Chrome' : 'Otro'}</p>
-        <p>Dispositivo: {debugInfo.isIOS ? 'iOS' : 'No iOS'}</p>
-        <p>WebXR API: {debugInfo.webXRVersion}</p>
-        <p>Detalles WebXR: {debugInfo.webXRDetails}</p>
-        {debugInfo.suggestion && (
-          <p style={{ color: '#FFA500', fontWeight: 'bold' }}>{debugInfo.suggestion}</p>
-        )}
-        {debugInfo.isIOS && (
-          <div style={{ marginTop: '10px', padding: '5px', backgroundColor: 'rgba(255,255,255,0.1)' }}>
-            <p style={{ marginTop: '0', fontWeight: 'bold' }}>Instrucciones para iOS 17+:</p>
-            <ol style={{ paddingLeft: '20px', margin: '5px 0' }}>
-              <li>Abre la app Ajustes</li>
-              <li>Navega a Safari</li>
-              <li>Desplázate hasta Funciones experimentales</li>
-              <li>Activa WebXR Device API</li>
-              <li>Activa WebXR Layers API</li>
-              <li>Activa WebXR Anchors Module</li>
-              <li>Reinicia Safari</li>
-            </ol>
-          </div>
-        )}
-        <p style={{ fontSize: '10px', opacity: '0.7', marginBottom: '0' }}>
-          User Agent: {debugInfo.userAgent.substring(0, 100)}...
-        </p>
-      </div>
-    );
+    // 2) Verificar que la API esté expuesta
+    if (!navigator.xr) {
+      if (isIOS) {
+        setError('Actualmente Safari y Chrome en iOS no exponen la API WebXR. Apple sólo ofrece soporte WebXR en visionOS (Apple Vision Pro). Por ahora no es posible iniciar la experiencia AR WebXR desde un iPhone o iPad.');
+      } else {
+        setError(`Tu navegador no expone la API WebXR.\nAsegúrate de habilitar los flags experimentales (WebXR Device API / WebXR Handheld AR) o utiliza un navegador compatible, por ejemplo Chrome/Edge en Android.`);
+      }
+      return;
+    }
+
+    // 3) Confirmar que soporta sesiones immersive-ar
+    try {
+      const supported = await navigator.xr.isSessionSupported('immersive-ar');
+      if (!supported) {
+        setError('Este dispositivo/navegador no soporta sesiones AR inmersivas (WebXR).');
+        return;
+      }
+    } catch (e) {
+      console.error(e);
+      setError('Error consultando soporte WebXR: ' + e.message);
+      return;
+    }
+
+    setError(null);
+    setStarted(true);
   };
 
   return (
@@ -199,7 +130,6 @@ const WorldAR = ({ defaultModel = '/models/car.glb' }) => {
           <br/><br/>
           <button onClick={handleStart}>Iniciar AR</button>
           {error && <p style={{color:'red'}}>{error}</p>}
-          {renderDebugPanel()}
         </>
       )}
     </div>
