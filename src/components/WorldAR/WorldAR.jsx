@@ -1,139 +1,98 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 
 // Componente WorldAR
 // Usa WebXR (immersive-ar) y hit-test para anclar un modelo 3D al mundo real de forma muy estable
 // Compatible con Chrome/Edge Android y Safari iOS 17+
 
-const WorldAR = ({ defaultModel = '/models/car.glb' }) => {
+const WorldAR = () => {
   const [started, setStarted] = useState(false);
-  const [selectedModel, setSelectedModel] = useState(defaultModel);
   const [error, setError] = useState(null);
-  const sceneRef = useRef(null);
-  const modelRef = useRef(null);
+  const [model, setModel] = useState('/models/car.glb');
 
-  // Carga dinámica de A-Frame + módulo webxr-hit-test
+  // Cargar 8th Wall XR Web script dinámicamente
   useEffect(() => {
     if (!started) return;
 
-    const load = async () => {
-      try {
-        if (!window.AFRAME) {
-          await loadScript('https://aframe.io/releases/1.4.2/aframe.min.js');
-        }
-        // Módulo hit-test
-        if (!window.AFRAME.components['ar-hit-test']) {
-          await loadScript('https://unpkg.com/aframe-ar-hit-test-component@1.0.2/dist/aframe-ar-hit-test-component.min.js');
-        }
-        buildScene();
-      } catch (e) {
-        console.error(e);
-        setError(e.message);
-      }
-    };
-    load();
+    const script = document.createElement('script');
+    script.src = 'https://apps.8thwall.com/xrweb?appKey=YOUR_APP_KEY_HERE'; // ← Reemplaza con tu APP KEY
+    script.async = true;
+    script.onload = init8thWall;
+    script.onerror = () => setError('Error cargando 8th Wall');
+    document.head.appendChild(script);
   }, [started]);
 
-  const loadScript = (src) => new Promise((res, rej) => {
-    const s = document.createElement('script');
-    s.src = src;
-    s.onload = res;
-    s.onerror = rej;
-    document.head.appendChild(s);
-  });
+  const init8thWall = () => {
+    if (!window.XR8) {
+      setError('8th Wall no inicializó');
+      return;
+    }
 
-  const buildScene = () => {
-    const scene = document.createElement('a-scene');
-    scene.setAttribute('renderer', 'colorManagement: true; physicallyCorrectLights: true; logarithmicDepthBuffer: true');
-    scene.setAttribute('webxr', 'mode: ar; requiredFeatures: hit-test; optionalFeatures: local-floor;');
-    scene.setAttribute('vr-mode-ui', 'enabled: false');
-    scene.setAttribute('embedded', '');
+    // Añadimos módulos básicos y el Geo Module
+    XR8.addCameraPipelineModules([
+      XR8.GlTextureRenderer.pipelineModule(),
+      XR8.XrController.pipelineModule(),
+      XR8.Geo.pipelineModule() // ← módulo geoespacial
+    ]);
 
-    // Cámara WebXR
-    const camera = document.createElement('a-camera');
-    camera.setAttribute('look-controls', 'enabled: false');
-    scene.appendChild(camera);
-
-    // Retícula + hit-test con creación automática de ANCHOR
-    const reticle = document.createElement('a-entity');
-    reticle.setAttribute('id', 'reticle');
-    reticle.setAttribute('ar-hit-test', 'type: plane; anchor: true;');
-    // Añadimos una malla slim para visualizar el punto de impacto
-    const ring = document.createElement('a-ring');
-    ring.setAttribute('radius-inner', '0.05');
-    ring.setAttribute('radius-outer', '0.06');
-    ring.setAttribute('rotation', '-90 0 0');
-    ring.setAttribute('material', 'color: #FFC107; shader: flat; opacity: 0.8');
-    reticle.appendChild(ring);
-    scene.appendChild(reticle);
-
-    // Cuando el usuario toca la pantalla y se genera un anchor
-    reticle.addEventListener('ar-hit-test-anchor-set', (e) => {
-      if (modelRef.current) return;
-      const anchorEl = e.detail.anchorEl; // elemento que mantiene la matriz del anchor
-      const m = document.createElement('a-entity');
-      m.setAttribute('gltf-model', selectedModel);
-      m.setAttribute('scale', '1 1 1');
-      anchorEl.appendChild(m); // El modelo hereda la matriz del anchor => sin saltos
-      modelRef.current = m;
-      ring.setAttribute('visible', 'false');
+    // Cuando el pipeline arranca creamos la escena A-Frame
+    XR8.addCameraPipelineModule({
+      name: 'init-aframe',
+      onStart: ({canvasWidth, canvasHeight}) => {
+        buildScene();
+      }
     });
 
-    document.body.appendChild(scene);
-    sceneRef.current = scene;
+    XR8.run({ canvas: document.getElementById('camerafeed') });
   };
 
-  const handleStart = async () => {
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-    // 1) Comprobar contexto seguro (HTTPS o localhost)
-    if (!window.isSecureContext && location.hostname !== 'localhost') {
-      setError('WebXR sólo funciona sobre HTTPS. Accede mediante https:// o usa localhost durante el desarrollo.');
+  const buildScene = () => {
+    // Creamos <a-scene>
+    const scene = document.createElement('a-scene');
+    scene.setAttribute('xrweb', ''); // 8th Wall injects camera etc.
+    scene.setAttribute('embedded', '');
+    scene.style.width = '100%';
+    scene.style.height = '100%';
+
+    // Entidad para el modelo, se anclará en geo-place
+    const modelEl = document.createElement('a-entity');
+    modelEl.setAttribute('id', 'geo-model');
+    modelEl.setAttribute('gltf-model', model);
+    modelEl.setAttribute('scale', '1 1 1');
+    scene.appendChild(modelEl);
+
+    document.body.appendChild(scene);
+
+    // Colocamos el modelo en la ubicación GPS actual (a 2 m delante)
+    navigator.geolocation.getCurrentPosition((pos)=>{
+      const {latitude, longitude} = pos.coords;
+      XR8.Geo.placeEntityAtLocation(modelEl, {latitude, longitude});
+    }, (e)=>{
+      console.warn('GPS error', e);
+    }, {enableHighAccuracy:true});
+  };
+
+  const start = () => {
+    if (!navigator.xr && !/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      setError('Este dispositivo/navegador no soporta experiencias WebAR de 8th Wall');
       return;
     }
-
-    // 2) Verificar que la API esté expuesta
-    if (!navigator.xr) {
-      if (isIOS) {
-        setError('Actualmente Safari y Chrome en iOS no exponen la API WebXR. Apple sólo ofrece soporte WebXR en visionOS (Apple Vision Pro). Por ahora no es posible iniciar la experiencia AR WebXR desde un iPhone o iPad.');
-      } else {
-        setError(`Tu navegador no expone la API WebXR.\nAsegúrate de habilitar los flags experimentales (WebXR Device API / WebXR Handheld AR) o utiliza un navegador compatible, por ejemplo Chrome/Edge en Android.`);
-      }
-      return;
-    }
-
-    // 3) Confirmar que soporta sesiones immersive-ar
-    try {
-      const supported = await navigator.xr.isSessionSupported('immersive-ar');
-      if (!supported) {
-        setError('Este dispositivo/navegador no soporta sesiones AR inmersivas (WebXR).');
-        return;
-      }
-    } catch (e) {
-      console.error(e);
-      setError('Error consultando soporte WebXR: ' + e.message);
-      return;
-    }
-
-    setError(null);
     setStarted(true);
   };
 
-  return (
-    <div style={{ textAlign: 'center', padding: '20px' }}>
-      {!started && (
-        <>
-          <h2>Experiencia AR (WebXR)</h2>
-          <p>Selecciona un modelo y pulsa Iniciar. Podrás anclarlo tocando en el suelo a través de la cámara.</p>
-          <select value={selectedModel} onChange={e => setSelectedModel(e.target.value)}>
-            <option value="/models/car.glb">Carro</option>
-            <option value="https://jeanrua.com/models/SantaMaria_actual.glb">Sta. María (Actual)</option>
-          </select>
-          <br/><br/>
-          <button onClick={handleStart}>Iniciar AR</button>
-          {error && <p style={{color:'red'}}>{error}</p>}
-        </>
-      )}
-    </div>
-  );
+  if (error) return <p style={{color:'red'}}>{error}</p>;
+
+  if (!started) {
+    return (
+      <div style={{textAlign:'center',padding:20}}>
+        <h2>Experiencia AR (8th Wall)</h2>
+        <p>Reemplaza <code>YOUR_APP_KEY_HERE</code> con tu App Key.</p>
+        <button onClick={start}>Iniciar AR</button>
+      </div>
+    );
+  }
+
+  // Canvas que 8th Wall usa para la cámara
+  return <canvas id="camerafeed" style={{position:'fixed',top:0,left:0,width:'100%',height:'100%'}}></canvas>;
 };
 
 export default WorldAR; 
