@@ -301,6 +301,10 @@ const FixedLocationAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_fu
           <button onClick={() => window.history.back()} className="geo-ar-back-btn">
             Volver
           </button>
+          
+          <button onClick={() => window.location.href = '#/ar-world'} className="geo-ar-back-btn geo-ar-alt-btn">
+            Experiencia AR con WebXR
+          </button>
         </div>
       )}
 

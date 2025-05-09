@@ -765,6 +765,13 @@ const GeoAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_futuro.glb' 
               >
                 Experiencia AR en Ubicación Fija
               </button>
+              
+              <button 
+                onClick={() => window.location.href = '#/ar-world'} 
+                className="geo-ar-secondary-btn geo-ar-alt-btn"
+              >
+                Experiencia AR con WebXR
+              </button>
             </div>
           </div>
           
