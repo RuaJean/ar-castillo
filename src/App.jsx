@@ -10,7 +10,7 @@ function App() {
       <div className="app-container">
         <div className="content">
           <Routes>
-            <Route path="/" element={<GeoAR modelPath="https://jeanrua.com/models/SantaMaria_futuro.glb" />} />
+            <Route path="/" element={<GeoAR modelPath="/models/car.glb" />} />
             <Route path="/ar-fijo" element={<FixedLocationAR modelPath="https://jeanrua.com/models/SantaMaria_futuro.glb" />} />
             <Route path="/ar-world" element={<WorldAR />} />
           </Routes>
