@@ -288,7 +288,7 @@ const FixedLocationAR = ({ modelPath = 'https://jeanrua.com/models/SantaMaria_fu
           <img 
             src="https://cdn-icons-png.flaticon.com/512/684/684908.png" 
             alt="GPS icon" 
-            className="geo-ar-location-icon" 
+            className="geo-ar-location-icon"   
           />
           
           <button 
