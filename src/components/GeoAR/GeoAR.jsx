@@ -7,12 +7,12 @@ const GeoAR = () => {
   const initAR = async () => {
     try {
       // Cargar scripts necesarios
-      if (!window.AFRAME) {
-        await loadScript('https://aframe.io/releases/1.3.0/aframe.min.js');
-      }
-      if (!window.AFRAME || !window.AFRAME.components['gps-camera']) {
-        await loadScript('https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js');
-      }
+          if (!window.AFRAME) {
+            await loadScript('https://aframe.io/releases/1.3.0/aframe.min.js');
+          }
+          if (!window.AFRAME || !window.AFRAME.components['gps-camera']) {
+            await loadScript('https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js');
+          }
 
       // Crear contenedor AR
       const arContainer = document.createElement('div');
@@ -65,7 +65,7 @@ const GeoAR = () => {
       console.error('Error al iniciar AR:', error);
     }
   };
-
+      
   const loadScript = (src) => {
     return new Promise((resolve, reject) => {
       const script = document.createElement('script');
@@ -79,7 +79,7 @@ const GeoAR = () => {
   return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
       {!arStarted && (
-        <button
+            <button
           onClick={initAR}
           style={{
             padding: '20px 40px',
@@ -92,7 +92,7 @@ const GeoAR = () => {
           }}
         >
           Iniciar AR
-        </button>
+            </button>
       )}
     </div>
   );
