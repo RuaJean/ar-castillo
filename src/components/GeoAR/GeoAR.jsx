@@ -61,9 +61,9 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
     console.log('[AR] Inicializando escena AR con hit-test para anclaje...');
 
     // Contenedor principal para la escena y la UI
-    const arContainer = document.createElement('div');
-    arContainer.className = 'ar-scene-container';
-    document.body.appendChild(arContainer);
+      const arContainer = document.createElement('div');
+      arContainer.className = 'ar-scene-container';
+      document.body.appendChild(arContainer);
     arContainerRef.current = arContainer;
 
     // Contenedor para la interfaz de usuario sobre la vista AR
@@ -97,7 +97,14 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
     const sceneEl = document.createElement('a-scene');
     sceneEl.setAttribute('embedded', '');
     sceneEl.setAttribute('vr-mode-ui', 'enabled: false');
-    sceneEl.setAttribute('webxr', `requiredFeatures: hit-test, dom-overlay; overlayElement: #${arUi.id}`);
+    
+    // La clave está aquí: solicitamos 'geospatial' para un seguimiento de alta precisión
+    // y 'hit-test' para poder anclar el objeto a una superficie detectada.
+    sceneEl.setAttribute('webxr', `
+      requiredFeatures: hit-test, geospatial, local-floor, dom-overlay;
+      optionalFeatures: light-estimation;
+      overlayElement: #${arUi.id}
+    `);
 
     // Assets: precargar el modelo 3D
     const assetsEl = document.createElement('a-assets');
@@ -191,21 +198,21 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
 
   // Renderiza la pantalla inicial con el botón
   const renderInitialScreen = () => (
-    <div className="geo-ar-permission">
+        <div className="geo-ar-permission">
       <div className="card">
         <h1 className="card-title">Realidad Aumentada</h1>
         <p className="card-subtitle">Ancla un modelo 3D en tu entorno utilizando la cámara de tu dispositivo.</p>
         <div className="action-buttons">
-          <button
+            <button
             onClick={startAR}
             className="primary-btn"
             disabled={stage === 'loading'}
           >
             {stage === 'loading' ? 'Cargando...' : 'Iniciar AR'}
-          </button>
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
   );
 
   // Renderiza una pantalla de carga mientras se preparan los scripts
@@ -213,7 +220,7 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
     <div className="geo-ar-loading-overlay">
       <div className="loading-spinner"></div>
       <p className="loading-text">Preparando la experiencia AR...</p>
-    </div>
+        </div>
   );
 
   // Renderiza una pantalla de error si algo falla
@@ -223,10 +230,10 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
         <h2 className="error-title">Error</h2>
         <p className="error-message">{error}</p>
         <button onClick={() => setStage('initial')} className="primary-btn">
-          Volver
-        </button>
-      </div>
-    </div>
+              Volver
+            </button>
+          </div>
+        </div>
   );
 
   return (
