@@ -15,44 +15,30 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
     setStage('loading');
   };
 
-  // Carga un script dinámicamente
-  const loadScript = (src) => {
-    return new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = src;
-      script.onload = () => {
-        console.log('[AR] Script cargado:', src);
-        resolve();
-      };
-      script.onerror = (err) => {
-        console.error('[AR] Error cargando script:', src, err);
-        reject(err);
-      };
-      document.head.appendChild(script);
-    });
-  };
+  // El script de A-Frame se da por cargado globalmente para evitar conflictos.
+  // La carga dinámica de scripts se ha eliminado.
 
-  // Efecto que carga los scripts necesarios y luego inicializa la escena
+  // Efecto que inicializa la escena AR cuando el estado es 'loading'
   useEffect(() => {
     if (stage === 'loading') {
-      const loadAndInit = async () => {
-        try {
-          if (!window.AFRAME) {
-            console.log('[AR] Cargando A-Frame...');
-            await loadScript('https://aframe.io/releases/1.3.0/aframe.min.js');
-          }
-          // Esperar un momento para que A-Frame esté completamente listo
-          setTimeout(() => {
-            initARScene();
-            setStage('started');
-          }, 500);
-        } catch (e) {
-          console.error('[AR] Error al cargar scripts:', e);
-          setError('No se pudieron cargar los scripts para la Realidad Aumentada.');
-          setStage('error');
-        }
-      };
-      loadAndInit();
+      // Se asume que A-Frame ya está cargado en la página globalmente (p.ej. en index.html).
+      // Los logs del problema indican que A-Frame v1.4.2 ya está presente.
+      // Eliminar la carga dinámica de v1.3.0 soluciona conflictos y advertencias de "múltiples instancias de Three.js".
+      if (!window.AFRAME) {
+        console.error('[AR] A-Frame no encontrado. Asegúrate de que el script de A-Frame está incluido en tu página.');
+        setError('Error crítico: A-Frame no está cargado.');
+        setStage('error');
+        return;
+      }
+      
+      try {
+        initARScene();
+        setStage('started');
+      } catch (e) {
+        console.error('[AR] Fallo al inicializar la escena AR:', e);
+        setError('No se pudo inicializar la escena de Realidad Aumentada.');
+        setStage('error');
+      }
     }
   }, [stage]);
 
@@ -95,31 +81,21 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
 
     // Creación de la escena de A-Frame
     const sceneEl = document.createElement('a-scene');
-    // Se elimina el atributo 'embedded' para que A-Frame controle toda la pantalla,
-    // lo que soluciona problemas de escalado en Android.
+    sceneEl.setAttribute('embedded', '');
     sceneEl.setAttribute('vr-mode-ui', 'enabled: false');
-    sceneEl.setAttribute('ar-mode-ui', 'enabled: false'); // Específico para AR
-    sceneEl.setAttribute('renderer', 'colorManagement: true; physicallyCorrectLights: true;');
     
-    // La clave está aquí: solicitamos 'geospatial' para un seguimiento de alta precisión
-    // y 'hit-test' para poder anclar el objeto a una superficie detectada.
+    // La clave está aquí: solicitamos 'hit-test' para poder anclar el objeto a una superficie detectada.
+    // 'local-floor' proporciona un punto de partida para el seguimiento.
+    // Se elimina 'geospatial' para simplificar y evitar posibles fuentes de error.
     sceneEl.setAttribute('webxr', `
-      requiredFeatures: hit-test, geospatial, local-floor, dom-overlay;
-      optionalFeatures: light-estimation;
+      requiredFeatures: hit-test, local-floor;
+      optionalFeatures: light-estimation, dom-overlay;
       overlayElement: #${arUi.id}
     `);
 
-    // Assets: precargar el modelo 3D
-    const assetsEl = document.createElement('a-assets');
-    const modelAsset = document.createElement('a-asset-item');
-    modelAsset.setAttribute('id', 'carModel');
-    modelAsset.setAttribute('src', selectedModel);
-    assetsEl.appendChild(modelAsset);
-    sceneEl.appendChild(assetsEl);
-
-    // Se añade una cámara explícitamente para asegurar un comportamiento predecible.
-    const cameraEl = document.createElement('a-camera');
-    sceneEl.appendChild(cameraEl);
+    // Assets: el modelo se cargará directamente en la entidad `a-entity` para evitar
+    // problemas de timing con `a-assets` al crear la escena dinámicamente.
+    // Por lo tanto, la sección <a-assets> no es necesaria.
 
     // Contenedor del modelo, que se moverá con la retícula de hit-test
     const modelContainer = document.createElement('a-entity');
@@ -138,8 +114,10 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
     // El modelo 3D real, inicialmente invisible
     const modelEl = document.createElement('a-entity');
     modelEl.id = 'model';
-    modelEl.setAttribute('gltf-model', '#carModel');
-    modelEl.setAttribute('scale', '0.1 0.1 0.1'); // Escala inicial, puede necesitar ajuste
+    // Se usa `url()` para cargar el modelo directamente, lo que es más robusto que usar el sistema de assets (#id)
+    // cuando la escena se crea por programación.
+    modelEl.setAttribute('gltf-model', `url(${selectedModel})`);
+    modelEl.setAttribute('scale', '0.3 0.3 0.3'); // Escala inicial aumentada, 0.1 puede ser muy pequeño
     modelEl.setAttribute('visible', 'false');
     modelContainer.appendChild(modelEl);
 
