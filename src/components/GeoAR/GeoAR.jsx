@@ -95,8 +95,11 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
 
     // Creación de la escena de A-Frame
     const sceneEl = document.createElement('a-scene');
-    sceneEl.setAttribute('embedded', '');
+    // Se elimina el atributo 'embedded' para que A-Frame controle toda la pantalla,
+    // lo que soluciona problemas de escalado en Android.
     sceneEl.setAttribute('vr-mode-ui', 'enabled: false');
+    sceneEl.setAttribute('ar-mode-ui', 'enabled: false'); // Específico para AR
+    sceneEl.setAttribute('renderer', 'colorManagement: true; physicallyCorrectLights: true;');
     
     // La clave está aquí: solicitamos 'geospatial' para un seguimiento de alta precisión
     // y 'hit-test' para poder anclar el objeto a una superficie detectada.
@@ -113,6 +116,10 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
     modelAsset.setAttribute('src', selectedModel);
     assetsEl.appendChild(modelAsset);
     sceneEl.appendChild(assetsEl);
+
+    // Se añade una cámara explícitamente para asegurar un comportamiento predecible.
+    const cameraEl = document.createElement('a-camera');
+    sceneEl.appendChild(cameraEl);
 
     // Contenedor del modelo, que se moverá con la retícula de hit-test
     const modelContainer = document.createElement('a-entity');
