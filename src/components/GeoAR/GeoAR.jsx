@@ -54,8 +54,6 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
     try {
       const newSession = await navigator.xr.requestSession('immersive-ar', {
         requiredFeatures: ['hit-test'],
-        optionalFeatures: ['dom-overlay'],
-        domOverlay: { root: containerRef.current }
       });
 
       setSession(newSession);
@@ -91,7 +89,7 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
     directionalLight.position.set(1, 1, 1);
     sceneRef.current.add(directionalLight);
-
+    
     // Retícula para indicar el punto de anclaje
     reticleRef.current = new THREE.Mesh(
       new THREE.RingGeometry(0.04, 0.06, 32).rotateX(-Math.PI / 2),
@@ -111,7 +109,7 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
       const clone = model.clone();
       clone.position.setFromMatrixPosition(reticleRef.current.matrix);
       sceneRef.current.add(clone);
-      
+
       // Opcional: ocultar la retícula una vez que se coloca un objeto
       // reticleRef.current.visible = false;
     }
@@ -187,38 +185,37 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
       }
     };
   }, [session]);
-  
+
   const renderInitialScreen = () => (
-    <div className="geo-ar-permission">
+        <div className="geo-ar-permission">
       <div className="card">
         <h1 className="card-title">Realidad Aumentada</h1>
         <p className="card-subtitle">Ancla un modelo 3D en tu entorno utilizando la cámara de tu dispositivo.</p>
         <div className="action-buttons">
-          <button
+            <button
             onClick={startAR}
             className="primary-btn"
             disabled={!isARSupported || !model}
           >
             {!model ? 'Cargando modelo...' : 'Iniciar AR'}
-          </button>
+              </button>
         </div>
         {error && <p className="error-message">{error}</p>}
-      </div>
-    </div>
+          </div>
+        </div>
   );
 
   return (
     <div ref={containerRef} className="geo-ar-container">
-      {session ? (
+      {session && (
         <>
-          <canvas ref={canvasRef} />
-          <button onClick={endAR} className="ar-button ar-back-button">
+          <canvas ref={canvasRef} style={{ position: 'absolute', top: 0, left: 0, zIndex: 1 }} />
+          <button onClick={endAR} className="ar-button ar-back-button" style={{ zIndex: 2 }}>
             Salir de AR
           </button>
         </>
-      ) : (
-        renderInitialScreen()
       )}
+      {!session && renderInitialScreen()}
     </div>
   );
 };
