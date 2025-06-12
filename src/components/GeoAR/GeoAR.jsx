@@ -48,12 +48,6 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
       return showError('Este dispositivo o navegador no soporta experiencias AR inmersivas.');
     }
 
-    const arcorePkg = 'com.google.ar.core';
-    if (navigator.userAgent.includes('Android') && !navigator.userAgent.includes(arcorePkg)) {
-      showError('Instala o actualiza "Google Play Services for AR" para usar Hit-Test.');
-      return;
-    }
-
     setStage('loading');
     try {
       // Intentamos primero con todas las características útiles.
