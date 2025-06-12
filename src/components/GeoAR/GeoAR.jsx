@@ -52,10 +52,12 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
     try {
       const session = await navigator.xr.requestSession('immersive-ar', {
         requiredFeatures: ['hit-test'],
+        optionalFeatures: ['dom-overlay', 'local-floor'],
+        domOverlay: { root: document.body },
       });
       onSessionStarted(session);
     } catch (err) {
-      showError('El usuario canceló o denegó los permisos de cámara.');
+      showError(err?.message || 'No se pudo iniciar la sesión de AR.');
     }
   };
 
