@@ -50,11 +50,24 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
 
     setStage('loading');
     try {
-      const session = await navigator.xr.requestSession('immersive-ar', {
+      // Intentamos primero con todas las características útiles.
+      const fullOptions = {
         requiredFeatures: ['hit-test'],
-        optionalFeatures: ['dom-overlay', 'local-floor'],
+        optionalFeatures: ['dom-overlay', 'anchors', 'plane-detection'],
         domOverlay: { root: document.body },
-      });
+      };
+
+      let session;
+      try {
+        session = await navigator.xr.requestSession('immersive-ar', fullOptions);
+      } catch (e) {
+        console.warn('[AR] Configuración completa de sesión no soportada, intentando una versión mínima.', e);
+        // Si falla, intentamos la configuración mínima
+        session = await navigator.xr.requestSession('immersive-ar', {
+          requiredFeatures: ['hit-test'],
+        });
+      }
+
       onSessionStarted(session);
     } catch (err) {
       showError(err?.message || 'No se pudo iniciar la sesión de AR.');
@@ -183,17 +196,17 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
      UI Helpers
   ===================================================================== */
   const renderInitialScreen = () => (
-    <div className="geo-ar-permission">
+        <div className="geo-ar-permission">
       <div className="card">
         <h1 className="card-title">Realidad Aumentada</h1>
         <p className="card-subtitle">Ancla un modelo 3D en tu entorno usando la cámara.</p>
         <div className="action-buttons">
           <button onClick={startAR} className="primary-btn" disabled={stage === 'loading'}>
             {stage === 'loading' ? 'Cargando...' : 'Iniciar AR'}
-          </button>
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
   );
 
   const renderErrorScreen = () => (
@@ -202,8 +215,8 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
         <h2 className="error-title">Error</h2>
         <p className="error-message">{errorMsg}</p>
         <button onClick={() => setStage('initial')} className="primary-btn">Volver</button>
-      </div>
-    </div>
+          </div>
+        </div>
   );
 
   return (
