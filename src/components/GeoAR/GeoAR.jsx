@@ -10,7 +10,16 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
   const arContainerRef = useRef(null);
 
   // Inicia el proceso para entrar en modo AR
-  const startAR = () => {
+  const startAR = async () => {
+    console.log('[AR] Verificando compatibilidad con WebXR...');
+    // Primero, comprobamos si el navegador soporta WebXR para AR.
+    if (!navigator.xr || !(await navigator.xr.isSessionSupported('immersive-ar'))) {
+      console.error('[AR] WebXR immersive-ar no es compatible en este navegador/dispositivo.');
+      setError('Tu navegador o dispositivo no es compatible con la Realidad Aumentada (WebXR). Por favor, usa un navegador moderno como Chrome en Android o Safari en iOS.');
+      setStage('error');
+      return;
+    }
+
     console.log('[AR] Solicitud de experiencia AR iniciada...');
     setStage('loading');
   };
@@ -81,7 +90,6 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
 
     // Creación de la escena de A-Frame
     const sceneEl = document.createElement('a-scene');
-    sceneEl.setAttribute('embedded', '');
     sceneEl.setAttribute('vr-mode-ui', 'enabled: false');
     
     // La clave está aquí: solicitamos 'hit-test' para poder anclar el objeto a una superficie detectada.
