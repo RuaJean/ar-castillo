@@ -36,21 +36,26 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
       setStage('initial');
     });
 
-    try {
-      // La llamada a enterVR() debe estar lo más cerca posible de la interacción del usuario.
-      // A-Frame se encargará de gestionar la sesión de AR.
-      await sceneEl.enterVR();
-      setStage('started'); // La escena ya está en modo inmersivo.
-    } catch (e) {
-      console.error('[AR] Fallo al entrar en modo AR:', e);
-      setError('No se pudo iniciar la sesión de Realidad Aumentada. Asegúrate de conceder los permisos para la cámara.');
-      setStage('error');
-      // Limpia si la entrada falla
-      if (arContainerRef.current) {
-        document.body.removeChild(arContainerRef.current);
-        arContainerRef.current = null;
+    // Se debe esperar a que la escena de A-Frame esté completamente cargada
+    // antes de intentar entrar en modo inmersivo.
+    sceneEl.addEventListener('loaded', async () => {
+      console.log('[AR] Escena de A-Frame cargada. Intentando entrar en modo AR...');
+      try {
+        // La llamada a enterVR() debe estar lo más cerca posible de la interacción del usuario.
+        // A-Frame se encargará de gestionar la sesión de AR.
+        await sceneEl.enterVR();
+        setStage('started'); // La escena ya está en modo inmersivo.
+      } catch (e) {
+        console.error('[AR] Fallo al entrar en modo AR:', e);
+        setError('No se pudo iniciar la sesión de Realidad Aumentada. Asegúrate de conceder los permisos para la cámara.');
+        setStage('error');
+        // Limpia si la entrada falla
+        if (arContainerRef.current) {
+          document.body.removeChild(arContainerRef.current);
+          arContainerRef.current = null;
+        }
       }
-    }
+    });
   };
 
   // El script de A-Frame se da por cargado globalmente para evitar conflictos.
@@ -227,12 +232,12 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
 
   return (
     <div className="geo-ar-container">
-      {stage === 'initial' && renderInitialScreen()}
-      {stage === 'loading' && <div className="geo-ar-loading-overlay">
-          <div className="loading-spinner"></div>
-          <p className="loading-text">Preparando la experiencia AR...</p>
-        </div>
-      }
+      {/*
+        Se muestra la pantalla inicial tanto en estado 'initial' como 'loading'.
+        La propia pantalla inicial se encarga de mostrar un estado de carga en el botón,
+        evitando así una superposición que pueda ocultar los diálogos de permisos del navegador.
+      */}
+      {(stage === 'initial' || stage === 'loading') && renderInitialScreen()}
       {stage === 'error' && renderErrorScreen()}
     </div>
   );
