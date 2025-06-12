@@ -3,20 +3,586 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
     <meta name="description" content="Visor de Realidad Aumentada con WebXR" />
+    
+    <!-- Meta tags para prevenir caché -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    
+    <!-- A-Frame es el único script que necesitamos aquí para que el componente de React funcione. -->
+    <!-- El componente se encargará de la lógica de AR usando WebXR. -->
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+
     <title>AR Castillo</title>
+    
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    
     <!--
-      Se ha limpiado completamente el archivo.
-      No se cargan A-Frame, AR.js ni Three.js desde aquí.
-      El control de la sesión de AR y el renderizado se hará
-      completamente desde el componente de React (GeoAR.jsx).
+      Se han eliminado todos los scripts relacionados con THREE.js, AR.js (aframe-ar-nft.js),
+      y los scripts de depuración personalizados.
+      
+      Razón:
+      1. Conflicto de librerías: AR.js (basado en marcadores) interfiere con la API de WebXR (sin marcadores)
+         que el componente GeoAR.jsx intenta utilizar. Los errores en los logs confirmaban este conflicto.
+      2. Gestión de dependencias: A-Frame ya incluye una versión compatible de THREE.js. Cargar otra
+         versión manualmente, junto con GLTFLoader y otros, causa advertencias de "múltiples instancias"
+         y puede provocar un comportamiento impredecible.
+      3. Simplificación: El componente de React está diseñado para manejar su propia lógica de AR.
+         Dejar el HTML limpio con solo A-Frame asegura que no haya variables globales o scripts
+         externos que modifiquen el comportamiento esperado.
     -->
+    
+  </body>
+</html>
+    
+    <!-- Script para mejorar la detección de QR -->
+    <script>
+      window.debugEnabled = true; // Activamos modo debug por defecto
+      
+      window.addEventListener('load', function() {
+        window.logSystemEvent('index.html', 'Configurando detector de QR mejorado', 'info');
+        
+        // Verificar que AFRAME está disponible
+        if (window.AFRAME) {
+          window.logSystemEvent('index.html', 'AFRAME detectado correctamente', 'info', { version: AFRAME.version });
+          
+          // Configurar para optimizar la detección QR
+          AFRAME.registerComponent('qr-debug', {
+            init: function() {
+              window.logSystemEvent('qr-debug', 'Componente de debug de QR inicializado', 'info');
+              this.video = document.querySelector('video');
+              this.startTime = Date.now();
+              this.frameCount = 0;
+              this.fps = 0;
+              
+              // Inicializar elemento visual para la depuración en pantalla
+              this.debugInfo = document.createElement('div');
+              this.debugInfo.className = 'ar-screen-debug-info';
+              this.debugInfo.style.position = 'absolute';
+              this.debugInfo.style.bottom = '80px';
+              this.debugInfo.style.left = '10px';
+              this.debugInfo.style.background = 'rgba(0,0,0,0.7)';
+              this.debugInfo.style.color = '#fff';
+              this.debugInfo.style.padding = '10px';
+              this.debugInfo.style.borderRadius = '5px';
+              this.debugInfo.style.fontFamily = 'monospace';
+              this.debugInfo.style.fontSize = '12px';
+              this.debugInfo.style.zIndex = '999';
+              this.debugInfo.style.pointerEvents = 'none';
+              this.debugInfo.style.maxWidth = '50%';
+              this.debugInfo.style.maxHeight = '30%';
+              this.debugInfo.style.overflow = 'auto';
+              document.body.appendChild(this.debugInfo);
+              
+              if (window.debugLog) {
+                window.debugLog('QR-DEBUG', 'Iniciando monitoreo de QR en pantalla');
+              }
+              
+              // Comprobar si AR.js está configurado correctamente para QR
+              setTimeout(() => {
+                if (this.el.sceneEl.systems.arjs) {
+                  const arjs = this.el.sceneEl.systems.arjs;
+                  if (arjs._arContext && arjs._arContext.arController) {
+                    const arController = arjs._arContext.arController;
+                    this.debugInfo.innerHTML = `
+                      <div style="margin-bottom:5px"><b>AR.js Estado:</b></div>
+                      <div style="margin-bottom:3px">trackingBackend: ${arjs._arContext.parameters.trackingBackend || 'desconocido'}</div>
+                      <div style="margin-bottom:3px">matrixCodeType: ${arjs._arContext.parameters.matrixCodeType || 'desconocido'}</div>
+                      <div style="margin-bottom:3px">markersAreEnable: ${arjs._arContext.parameters.trackingBackend === 'artoolkit' ? 'true' : 'false'}</div>
+                      <div style="margin-bottom:3px">videoWidth: ${this.video ? this.video.videoWidth : 'no video'}</div>
+                      <div style="margin-bottom:3px">videoHeight: ${this.video ? this.video.videoHeight : 'no video'}</div>
+                      <div style="margin-bottom:3px">thresholdValue: ${arController.getThreshold ? arController.getThreshold() : 'desconocido'}</div>
+                      <div style="color:${arjs._arContext.parameters.trackingBackend === 'artoolkit' ? '#2ecc71' : '#e74c3c'}">
+                        ${arjs._arContext.parameters.trackingBackend === 'artoolkit' ? '✓ Configuración QR correcta' : '✗ Problema QR detectado'}
+                      </div>
+                    `;
+                    
+                    if (window.debugLog) {
+                      window.debugLog('QR-DEBUG', 'Estado AR.js mostrado en pantalla', {
+                        trackingBackend: arjs._arContext.parameters.trackingBackend || 'desconocido',
+                        matrixCodeType: arjs._arContext.parameters.matrixCodeType || 'desconocido',
+                        markersAreEnable: arjs._arContext.parameters.trackingBackend === 'artoolkit'
+                      });
+                    }
+                    
+                    // Si no está configurado correctamente, intentamos corregirlo
+                    if (arjs._arContext.parameters.trackingBackend !== 'artoolkit') {
+                      window.debugLog('QR-FIX', 'Intentando corregir trackingBackend');
+                      arjs._arContext.parameters.trackingBackend = 'artoolkit';
+                      this.debugInfo.innerHTML += `
+                        <div style="margin-top:10px; color:#f39c12">⚠️ Solución aplicada: trackingBackend cambiado a artoolkit</div>
+                      `;
+                    }
+                    
+                    // Si matrixCodeType no es 3 (QR), lo corregimos
+                    const matrixType = arjs._arContext.parameters.matrixCodeType;
+                    if (matrixType !== 3 && arController.setMatrixCodeType) {
+                      window.debugLog('QR-FIX', 'Corrigiendo matrixCodeType para QR');
+                      try {
+                        arController.setMatrixCodeType(3);
+                        this.debugInfo.innerHTML += `
+                          <div style="margin-top:5px; color:#f39c12">⚠️ Solución aplicada: matrixCodeType cambiado a 3 (QR)</div>
+                        `;
+                      } catch (e) {
+                        window.debugLog('ERROR', 'Error al cambiar matrixCodeType', e);
+                      }
+                    }
+                    
+                    // Si el umbral es demasiado alto, lo reducimos
+                    if (arController.getThreshold && arController.getThreshold() > 0.6) {
+                      window.debugLog('QR-FIX', 'Ajustando umbral de detección');
+                      try {
+                        arController.setThreshold(0.5);
+                        this.debugInfo.innerHTML += `
+                          <div style="margin-top:5px; color:#f39c12">⚠️ Solución aplicada: umbral reducido a 0.5</div>
+                        `;
+                      } catch (e) {
+                        window.debugLog('ERROR', 'Error al ajustar umbral', e);
+                      }
+                    }
+                  } else {
+                    this.debugInfo.innerHTML = `
+                      <div style="color:#e74c3c">✗ Error: AR Controller no inicializado</div>
+                      <div style="margin-top:5px">Espera unos segundos, recarga la página o verifica la conexión a la cámara.</div>
+                    `;
+                    window.debugLog('ERROR', 'AR Controller no inicializado');
+                  }
+                } else {
+                  this.debugInfo.innerHTML = `
+                    <div style="color:#e74c3c">✗ Error: Sistema AR.js no encontrado</div>
+                    <div style="margin-top:5px">Verifica que AR.js se ha cargado correctamente.</div>
+                  `;
+                  window.debugLog('ERROR', 'Sistema AR.js no encontrado en escena');
+                }
+              }, 2000);
+            },
+            
+            tick: function() {
+              this.frameCount++;
+              
+              // Calculamos FPS cada segundo
+              const now = Date.now();
+              if (now - this.startTime >= 1000) {
+                this.fps = this.frameCount / ((now - this.startTime) / 1000);
+                this.frameCount = 0;
+                this.startTime = now;
+                
+                // Actualizamos información en pantalla cada 3 segundos
+                if (!this._lastInfoUpdate || (now - this._lastInfoUpdate > 3000)) {
+                  this._lastInfoUpdate = now;
+                  
+                  // Solo si tenemos el elemento de debug
+                  if (this.debugInfo) {
+                    const scene = this.el.sceneEl;
+                    if (scene.systems.arjs && scene.systems.arjs._arContext) {
+                      const arjs = scene.systems.arjs;
+                      const video = document.querySelector('video');
+                      
+                      // Comprobamos estado actual de los marcadores
+                      let markersDetected = 0;
+                      if (arjs._arMarkersControls) {
+                        markersDetected = arjs._arMarkersControls.filter(m => 
+                          m && m.object3D && m.object3D.visible
+                        ).length;
+                      }
+                      
+                      // Actualizamos la información
+                      const currentInfo = this.debugInfo.innerHTML;
+                      const additionalInfo = `
+                        <div style="margin-top:10px; border-top:1px solid #aaa; padding-top:5px">
+                          <div>FPS: ${this.fps.toFixed(1)}</div>
+                          <div>Video: ${video ? `${video.videoWidth}x${video.videoHeight}` : 'no disponible'}</div>
+                          <div>Marcadores detectados: ${markersDetected}/${arjs._arMarkersControls ? arjs._arMarkersControls.length : 0}</div>
+                          <div>Tiempo: ${new Date().toLocaleTimeString()}</div>
+                        </div>
+                      `;
+                      
+                      // Solo reemplazamos la parte de actualización, no toda la información
+                      if (currentInfo.includes('<div style="margin-top:10px; border-top:1px solid #aaa; padding-top:5px">')) {
+                        this.debugInfo.innerHTML = currentInfo.replace(
+                          /<div style="margin-top:10px; border-top:1px solid #aaa; padding-top:5px">[\s\S]*?<\/div>/,
+                          additionalInfo
+                        );
+                      } else {
+                        this.debugInfo.innerHTML += additionalInfo;
+                      }
+                      
+                      // Si hay algún error, lo registramos y mostramos
+                      if (arjs._arContext && arjs._arContext.parameters.trackingBackend !== 'artoolkit') {
+                        window.debugLog('ERROR', 'trackingBackend sigue incorrecto', {
+                          actual: arjs._arContext.parameters.trackingBackend,
+                          esperado: 'artoolkit'
+                        });
+                        this.debugInfo.innerHTML += `
+                          <div style="margin-top:5px; color:#e74c3c">
+                            ✗ Error crítico: trackingBackend = ${arjs._arContext.parameters.trackingBackend}
+                          </div>
+                        `;
+                      }
+                      
+                      if (window.debugLog && window.ARJSDebugger && window.ARJSDebugger.verbose) {
+                        window.debugLog('QR-DEBUG', 'Actualización de estado', {
+                          fps: this.fps.toFixed(1),
+                          markersDetected,
+                          videoResolution: video ? `${video.videoWidth}x${video.videoHeight}` : 'no disponible'
+                        });
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            
+            remove: function() {
+              // Eliminar el elemento de debug cuando se desmonte el componente
+              if (this.debugInfo && this.debugInfo.parentNode) {
+                this.debugInfo.parentNode.removeChild(this.debugInfo);
+              }
+            }
+          });
+          
+          // Componente para escanear y detectar QR Codes (similar al anterior pero con más opciones)
+          AFRAME.registerComponent('qr-scanner', {
+            init: function () {
+              window.logSystemEvent('qr-scanner', 'Inicializando detector QR mejorado', 'info');
+              
+              this.lastScan = 0;
+              this.scanInterval = 500; // Milisegundos entre escaneos
+              
+              // Botón para copiar logs de QR al portapapeles
+              this.addQRLogButton();
+              
+              // Intentamos añadir listeners adicionales para capturar eventos de marcadores
+              try {
+                if (AFRAME.scenes.length > 0 && AFRAME.scenes[0].systems.arjs) {
+                  window.logSystemEvent('qr-scanner', 'Sistema AR.js detectado, ampliando funcionalidad', 'info');
+                  
+                  // Modificamos la configuración para maximizar compatibilidad QR
+                  const arSystem = AFRAME.scenes[0].systems.arjs;
+                  if (arSystem._arMarkersControls) {
+                    window.logSystemEvent('qr-scanner', 'Ajustando configuración de marcadores para QR', 'info');
+                    
+                    arSystem._arMarkersControls.forEach(marker => {
+                      // Comprobamos si es un marcador de tipo barcode (QR)
+                      if (marker && marker.parameters && marker.parameters.type === 'barcode') {
+                        marker.parameters.debugEnabled = true;
+                        marker.parameters.minConfidence = 0.3; // Reducimos la confianza mínima
+                        window.logSystemEvent('qr-scanner', 'Marcador QR encontrado y configurado', 'info');
+                      }
+                    });
+                  }
+                  
+                  // Comprobamos el estado de AR context cada poco tiempo
+                  this.checkARContextInterval = setInterval(() => {
+                    if (arSystem._arContext && arSystem._arContext.parameters) {
+                      // Comprobamos si trackingBackend está configurado correctamente
+                      if (arSystem._arContext.parameters.trackingBackend !== 'artoolkit') {
+                        window.debugLog('QR-FIX', 'Corrigiendo trackingBackend automáticamente', {
+                          actual: arSystem._arContext.parameters.trackingBackend,
+                          nuevo: 'artoolkit'
+                        });
+                        
+                        arSystem._arContext.parameters.trackingBackend = 'artoolkit';
+                        
+                        // Notificamos visualmente al usuario
+                        this.showFixNotification('trackingBackend corregido a artoolkit');
+                      }
+                      
+                      // Comprobamos matrixCodeType para QR
+                      if (arSystem._arContext.arController && 
+                          arSystem._arContext.arController.getMatrixCodeType && 
+                          arSystem._arContext.arController.getMatrixCodeType() !== 3) {
+                        window.debugLog('QR-FIX', 'Corrigiendo matrixCodeType para QR', {
+                          actual: arSystem._arContext.arController.getMatrixCodeType(),
+                          nuevo: 3
+                        });
+                        
+                        try {
+                          arSystem._arContext.arController.setMatrixCodeType(3);
+                          this.showFixNotification('matrixCodeType corregido a 3 (QR)');
+                        } catch (e) {
+                          window.debugLog('ERROR', 'Error al corregir matrixCodeType', e);
+                        }
+                      }
+                    }
+                  }, 5000);
+                } else {
+                  window.logSystemEvent('qr-scanner', 'Sistema AR.js no disponible en la escena', 'warn');
+                }
+              } catch (error) {
+                window.logSystemEvent('qr-scanner', 'Error al configurar detección avanzada de QR', 'error', { error: error.message });
+              }
+            },
+            
+            addQRLogButton: function() {
+              // Añadimos un botón flotante para registrar y exportar datos de QR
+              const button = document.createElement('button');
+              button.textContent = '📋 Logs QR';
+              button.style.position = 'fixed';
+              button.style.bottom = '20px';
+              button.style.left = '20px';
+              button.style.zIndex = '9999';
+              button.style.padding = '8px 12px';
+              button.style.backgroundColor = '#3498db';
+              button.style.color = 'white';
+              button.style.border = 'none';
+              button.style.borderRadius = '4px';
+              button.style.fontSize = '14px';
+              
+              button.addEventListener('click', () => {
+                this.exportQRDebugData();
+              });
+              
+              document.body.appendChild(button);
+              this.qrLogButton = button;
+            },
+            
+            exportQRDebugData: function() {
+              try {
+                // Recopilamos información del contexto AR
+                let debugData = "=== DATOS DE DEPURACIÓN QR ===\n\n";
+                debugData += `Fecha y hora: ${new Date().toLocaleString()}\n`;
+                debugData += `Navegador: ${navigator.userAgent}\n\n`;
+                
+                // Información de AR.js
+                if (this.el.sceneEl.systems.arjs) {
+                  const arjs = this.el.sceneEl.systems.arjs;
+                  debugData += "--- CONFIGURACIÓN AR.JS ---\n";
+                  
+                  if (arjs._arContext && arjs._arContext.parameters) {
+                    const params = arjs._arContext.parameters;
+                    debugData += `trackingBackend: ${params.trackingBackend || 'desconocido'}\n`;
+                    debugData += `matrixCodeType: ${params.matrixCodeType || 'desconocido'}\n`;
+                    debugData += `detectionMode: ${params.detectionMode || 'desconocido'}\n`;
+                    debugData += `canvasWidth: ${params.canvasWidth || 'desconocido'}\n`;
+                    debugData += `canvasHeight: ${params.canvasHeight || 'desconocido'}\n`;
+                    debugData += `maxDetectionRate: ${params.maxDetectionRate || 'desconocido'}\n`;
+                    debugData += `debugEnabled: ${params.debugEnabled || 'false'}\n`;
+                  } else {
+                    debugData += "No se encontraron parámetros de AR.js\n";
+                  }
+                  
+                  // Información de marcadores
+                  if (arjs._arMarkersControls) {
+                    debugData += "\n--- MARCADORES ---\n";
+                    debugData += `Total de marcadores: ${arjs._arMarkersControls.length}\n`;
+                    
+                    arjs._arMarkersControls.forEach((marker, i) => {
+                      if (marker && marker.parameters) {
+                        debugData += `\nMarcador #${i}:\n`;
+                        debugData += `  Tipo: ${marker.parameters.type || 'desconocido'}\n`;
+                        debugData += `  Valor barcode: ${marker.parameters.barcodeValue !== undefined ? marker.parameters.barcodeValue : 'N/A'}\n`;
+                        debugData += `  Patrón URL: ${marker.parameters.patternUrl || 'N/A'}\n`;
+                        debugData += `  Confianza mínima: ${marker.parameters.minConfidence || 'desconocido'}\n`;
+                        debugData += `  Visible: ${marker.object3D && marker.object3D.visible ? 'sí' : 'no'}\n`;
+                      }
+                    });
+                  } else {
+                    debugData += "\nNo se encontraron controles de marcadores\n";
+                  }
+                  
+                  // Información de vídeo/cámara
+                  const video = document.querySelector('video');
+                  if (video) {
+                    debugData += "\n--- INFORMACIÓN DE VÍDEO ---\n";
+                    debugData += `Resolución: ${video.videoWidth}x${video.videoHeight}\n`;
+                    debugData += `Video paused: ${video.paused}\n`;
+                    debugData += `Src object: ${video.srcObject ? 'presente' : 'ausente'}\n`;
+                  } else {
+                    debugData += "\nNo se encontró elemento de vídeo\n";
+                  }
+                  
+                  // Estado actual de los marcadores
+                  if (arjs._arMarkersControls) {
+                    const activeMarkers = arjs._arMarkersControls.filter(m => 
+                      m && m.object3D && m.object3D.visible
+                    );
+                    
+                    debugData += "\n--- ESTADO ACTUAL ---\n";
+                    debugData += `Marcadores activos: ${activeMarkers.length}/${arjs._arMarkersControls.length}\n`;
+                    
+                    if (activeMarkers.length > 0) {
+                      activeMarkers.forEach((marker, i) => {
+                        debugData += `\nMarcador activo #${i}:\n`;
+                        debugData += `  Tipo: ${marker.parameters ? marker.parameters.type : 'desconocido'}\n`;
+                        debugData += `  Valor: ${marker.parameters ? marker.parameters.barcodeValue : 'desconocido'}\n`;
+                        debugData += `  Posición: ${marker.object3D ? JSON.stringify(marker.object3D.position) : 'desconocido'}\n`;
+                      });
+                    }
+                  }
+                } else {
+                  debugData += "Sistema AR.js no encontrado en la escena\n";
+                }
+                
+                // Copiamos al portapapeles
+                navigator.clipboard.writeText(debugData)
+                  .then(() => {
+                    alert("Datos de depuración QR copiados al portapapeles");
+                    
+                    if (window.debugLog) {
+                      window.debugLog('QR-SCANNER', 'Datos de depuración copiados al portapapeles');
+                    }
+                  })
+                  .catch(err => {
+                    // Fallback si falla
+                    alert("No se pudo copiar automáticamente. Por favor copia manualmente:\n\n" + debugData);
+                    
+                    // Creamos un elemento temporal para mostrar los datos
+                    const textarea = document.createElement('textarea');
+                    textarea.value = debugData;
+                    textarea.style.position = 'fixed';
+                    textarea.style.left = '0';
+                    textarea.style.top = '0';
+                    textarea.style.width = '100%';
+                    textarea.style.height = '50%';
+                    textarea.style.padding = '10px';
+                    textarea.style.zIndex = '9999';
+                    textarea.style.background = 'white';
+                    textarea.style.color = 'black';
+                    
+                    document.body.appendChild(textarea);
+                    textarea.focus();
+                    textarea.select();
+                    
+                    // Añadimos un botón para cerrar
+                    const closeButton = document.createElement('button');
+                    closeButton.textContent = 'Cerrar';
+                    closeButton.style.position = 'fixed';
+                    closeButton.style.top = '10px';
+                    closeButton.style.right = '10px';
+                    closeButton.style.zIndex = '10000';
+                    closeButton.style.padding = '5px 10px';
+                    
+                    closeButton.addEventListener('click', () => {
+                      document.body.removeChild(textarea);
+                      document.body.removeChild(closeButton);
+                    });
+                    
+                    document.body.appendChild(closeButton);
+                    
+                    if (window.debugLog) {
+                      window.debugLog('ERROR', 'No se pudo copiar datos QR al portapapeles', err);
+                    }
+                  });
+              } catch (err) {
+                alert("Error al exportar datos de QR: " + err.message);
+                
+                if (window.debugLog) {
+                  window.debugLog('ERROR', 'Error al exportar datos QR', err);
+                }
+              }
+            },
+            
+            showFixNotification: function(message) {
+              // Muestra una notificación visual cuando se aplica una corrección
+              const notification = document.createElement('div');
+              notification.textContent = '🛠️ ' + message;
+              notification.style.position = 'fixed';
+              notification.style.top = '50px';
+              notification.style.left = '50%';
+              notification.style.transform = 'translateX(-50%)';
+              notification.style.backgroundColor = 'rgba(243, 156, 18, 0.9)';
+              notification.style.color = 'white';
+              notification.style.padding = '10px 20px';
+              notification.style.borderRadius = '5px';
+              notification.style.zIndex = '10000';
+              notification.style.fontFamily = 'Arial, sans-serif';
+              notification.style.fontSize = '14px';
+              notification.style.boxShadow = '0 2px 10px rgba(0,0,0,0.2)';
+              
+              document.body.appendChild(notification);
+              
+              setTimeout(() => {
+                notification.style.opacity = '0';
+                notification.style.transition = 'opacity 0.5s';
+                
+                setTimeout(() => {
+                  if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                  }
+                }, 500);
+              }, 3000);
+            },
+            
+            tick: function (time) {
+              // Minimizamos la frecuencia de escaneo para evitar sobrecarga
+              if (time - this.lastScan < this.scanInterval) return;
+              this.lastScan = time;
+              
+              // Debug periódico en modo debug
+              if (window.debugEnabled) {
+                if (!this._lastDebugLog || (time - this._lastDebugLog > 3000)) {
+                  this._lastDebugLog = time;
+                  window.logSystemEvent('qr-scanner', 'Escaneando QR...', 'debug');
+                }
+              }
+            },
+            
+            remove: function() {
+              // Limpieza al desmontar el componente
+              if (this.checkARContextInterval) {
+                clearInterval(this.checkARContextInterval);
+              }
+              
+              if (this.qrLogButton && this.qrLogButton.parentNode) {
+                this.qrLogButton.parentNode.removeChild(this.qrLogButton);
+              }
+            }
+          });
+          
+          // Añadimos un sistema global para solucionar problemas con la cámara
+          AFRAME.registerSystem('camera-fix', {
+            init: function() {
+              // Comprobamos periódicamente si hay problemas con la cámara
+              setInterval(() => {
+                const videoEls = document.querySelectorAll('video');
+                if (videoEls.length > 0) {
+                  // Si hay videos disponibles, la cámara está activa
+                  window.cameraAvailable = true;
+                  document.body.setAttribute('data-camera-available', 'true');
+                  window.logSystemEvent('camera-fix', 'Cámara detectada y activa', 'debug');
+                  
+                  // Comprobamos si hay alguna sobreposición de error de cámara para ocultarla
+                  const permissionOverlays = document.querySelectorAll('.ar-permission-denied');
+                  if (permissionOverlays.length > 0) {
+                    permissionOverlays.forEach(overlay => {
+                      overlay.style.display = 'none';
+                      window.logSystemEvent('camera-fix', 'Ocultando overlay de permisos denegados', 'info');
+                    });
+                  }
+                }
+              }, 3000);
+            }
+          });
+        } else {
+          console.warn('AFRAME no está disponible para configurar detector de QR');
+          window.logSystemEvent('index.html', 'AFRAME no disponible, detector QR no inicializado', 'error');
+        }
+      });
+    </script>
+    
+    <!-- CSS para corregir problemas visuales con sobreposición de error de cámara -->
+    <style>
+      /* Cuando detectamos que la cámara está disponible, ocultamos el overlay de error */
+      body[data-camera-available="true"] .ar-permission-denied {
+        display: none !important;
+      }
+      
+      /* Estilo para mantener visible el stream de video */
+      .a-canvas, video {
+        z-index: 0 !important;
+      }
+    </style>
+    
+    <title>Visor AR - Modelo 3D</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
