@@ -21,35 +21,40 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
     }
 
     console.log('[AR] Solicitud de experiencia AR iniciada...');
-    setStage('loading');
+    setStage('loading'); // Oculta la UI inicial y podría mostrar un spinner
+
+    const sceneEl = initARScene();
+
+    // Escuchador para cuando el usuario sale del modo AR.
+    // Esto limpia la escena y resetea el estado de la aplicación.
+    sceneEl.addEventListener('exit-vr', () => {
+      console.log('[AR] Saliendo de la experiencia AR.');
+      if (arContainerRef.current) {
+        document.body.removeChild(arContainerRef.current);
+        arContainerRef.current = null;
+      }
+      setStage('initial');
+    });
+
+    try {
+      // La llamada a enterVR() debe estar lo más cerca posible de la interacción del usuario.
+      // A-Frame se encargará de gestionar la sesión de AR.
+      await sceneEl.enterVR();
+      setStage('started'); // La escena ya está en modo inmersivo.
+    } catch (e) {
+      console.error('[AR] Fallo al entrar en modo AR:', e);
+      setError('No se pudo iniciar la sesión de Realidad Aumentada. Asegúrate de conceder los permisos para la cámara.');
+      setStage('error');
+      // Limpia si la entrada falla
+      if (arContainerRef.current) {
+        document.body.removeChild(arContainerRef.current);
+        arContainerRef.current = null;
+      }
+    }
   };
 
   // El script de A-Frame se da por cargado globalmente para evitar conflictos.
   // La carga dinámica de scripts se ha eliminado.
-
-  // Efecto que inicializa la escena AR cuando el estado es 'loading'
-  useEffect(() => {
-    if (stage === 'loading') {
-      // Se asume que A-Frame ya está cargado en la página globalmente (p.ej. en index.html).
-      // Los logs del problema indican que A-Frame v1.4.2 ya está presente.
-      // Eliminar la carga dinámica de v1.3.0 soluciona conflictos y advertencias de "múltiples instancias de Three.js".
-      if (!window.AFRAME) {
-        console.error('[AR] A-Frame no encontrado. Asegúrate de que el script de A-Frame está incluido en tu página.');
-        setError('Error crítico: A-Frame no está cargado.');
-        setStage('error');
-        return;
-      }
-      
-      try {
-        initARScene();
-        setStage('started');
-      } catch (e) {
-        console.error('[AR] Fallo al inicializar la escena AR:', e);
-        setError('No se pudo inicializar la escena de Realidad Aumentada.');
-        setStage('error');
-      }
-    }
-  }, [stage]);
 
   // Función principal para construir la escena de RA
   const initARScene = () => {
@@ -78,18 +83,17 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
     backButton.className = 'ar-button ar-back-button';
     backButton.style.pointerEvents = 'auto';
     backButton.addEventListener('click', () => {
-      // Limpia la escena y vuelve a la pantalla inicial
-      if (arContainerRef.current) {
-        document.body.removeChild(arContainerRef.current);
-        arContainerRef.current = null;
-      }
-      setStage('initial');
+      // La forma correcta de salir es pedirle a la escena que finalice la sesión de VR/AR.
+      // Esto disparará el evento 'exit-vr' que hemos capturado arriba.
+      sceneEl.exitVR();
     });
     arUi.appendChild(backButton);
     arContainer.appendChild(arUi);
 
-    // Creación de la escena de A-Frame
+    // Creación de la escena de A-Frame (se devuelve para poder manipularla)
     const sceneEl = document.createElement('a-scene');
+
+    // Creación de la escena de A-Frame
     sceneEl.setAttribute('vr-mode-ui', 'enabled: false');
     
     // La clave está aquí: solicitamos 'hit-test' para poder anclar el objeto a una superficie detectada.
@@ -177,17 +181,9 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
         arUi.appendChild(repositionButton);
       }
     });
-  };
 
-  // Efecto de limpieza para eliminar la escena AR al salir del componente
-  useEffect(() => {
-    return () => {
-      if (arContainerRef.current) {
-        document.body.removeChild(arContainerRef.current);
-        arContainerRef.current = null;
-      }
-    };
-  }, []);
+    return sceneEl;
+  };
 
   // Renderiza la pantalla inicial con el botón
   const renderInitialScreen = () => (
