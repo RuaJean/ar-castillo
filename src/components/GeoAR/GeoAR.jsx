@@ -1,242 +1,211 @@
-import React, { useState, useRef, useEffect } from 'react';
-import './GeoAR.css';
+import React, { useRef, useState } from 'react';
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+
+/*
+  Componente GeoAR basado en el tutorial oficial de Google "Hello WebXR".
+  - Usa WebXR + THREE.js sin depender de A-Frame ni AR.js.
+  - Realiza hit-testing para permitir anclar un modelo GLTF en una superficie real.
+  - Sigue de forma fiel los pasos descritos en:
+    https://developers.google.com/ar/develop/webxr/hello-webxr
+*/
 
 const GeoAR = ({ modelPath = '/models/car.glb' }) => {
-  const [stage, setStage] = useState('initial'); // "initial", "loading", "started", "error"
-  const [error, setError] = useState(null);
-  const [selectedModel] = useState(modelPath);
+  const [stage, setStage] = useState('initial'); // initial | loading | started | error
+  const [errorMsg, setErrorMsg] = useState('');
+  const containerRef = useRef(null);
 
-  // Ref para el contenedor de la escena AR para poder limpiarlo después
-  const arContainerRef = useRef(null);
+  // Variables de THREE que se necesitan en todo el ciclo de vida
+  const threeRef = useRef({
+    renderer: null,
+    scene: null,
+    camera: null,
+    reticle: null,
+    model: null,
+    hitTestSource: null,
+    referenceSpace: null,
+  });
 
-  // Inicia el proceso para entrar en modo AR
+  /* =====================================================================
+     Utilidades internas
+  ===================================================================== */
+  const showError = (msg) => {
+    console.error('[AR] ', msg);
+    setErrorMsg(msg);
+    setStage('error');
+  };
+
+  /* =====================================================================
+     Paso 1: Verificar compatibilidad y solicitar la sesión
+  ===================================================================== */
   const startAR = async () => {
-    console.log('[AR] Verificando compatibilidad con WebXR...');
-    // Primero, comprobamos si el navegador soporta WebXR para AR.
-    if (!navigator.xr || !(await navigator.xr.isSessionSupported('immersive-ar'))) {
-      console.error('[AR] WebXR immersive-ar no es compatible en este navegador/dispositivo.');
-      setError('Tu navegador o dispositivo no es compatible con la Realidad Aumentada (WebXR). Por favor, usa un navegador moderno como Chrome en Android o Safari en iOS.');
-      setStage('error');
-      return;
+    if (!navigator.xr) {
+      return showError('WebXR no está disponible en este navegador.');
     }
 
-    console.log('[AR] Solicitud de experiencia AR iniciada...');
-    setStage('loading'); // Oculta la UI inicial y podría mostrar un spinner
+    const isSupported = await navigator.xr.isSessionSupported('immersive-ar');
+    if (!isSupported) {
+      return showError('Este dispositivo o navegador no soporta experiencias AR inmersivas.');
+    }
 
-    const sceneEl = initARScene();
+    setStage('loading');
+    try {
+      const session = await navigator.xr.requestSession('immersive-ar', {
+        requiredFeatures: ['hit-test'],
+      });
+      onSessionStarted(session);
+    } catch (err) {
+      showError('El usuario canceló o denegó los permisos de cámara.');
+    }
+  };
 
-    // Escuchador para cuando el usuario sale del modo AR.
-    // Esto limpia la escena y resetea el estado de la aplicación.
-    sceneEl.addEventListener('exit-vr', () => {
-      console.log('[AR] Saliendo de la experiencia AR.');
-      if (arContainerRef.current) {
-        document.body.removeChild(arContainerRef.current);
-        arContainerRef.current = null;
+  /* =====================================================================
+     Paso 2: Configurar THREE.js con WebXR
+  ===================================================================== */
+  const onSessionStarted = async (session) => {
+    // 1. Crear renderer y adjuntarlo al contenedor
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.xr.enabled = true;
+    const container = document.createElement('div');
+    container.style.position = 'fixed';
+    container.style.top = '0';
+    container.style.left = '0';
+    container.style.width = '100%';
+    container.style.height = '100%';
+    container.style.zIndex = '0';
+    container.appendChild(renderer.domElement);
+    document.body.appendChild(container);
+    containerRef.current = container;
+
+    // 2. Crear la escena y la cámara
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera();
+
+    // 3. Luz ambiental simple
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1));
+
+    // 4. Cargar retículo GLTF
+    const loader = new GLTFLoader();
+    let reticle;
+    try {
+      const gltf = await loader.loadAsync('https://immersive-web.github.io/webxr-samples/media/gltf/reticle/reticle.gltf');
+      reticle = gltf.scene;
+      reticle.visible = false;
+      scene.add(reticle);
+    } catch (err) {
+      console.warn('[AR] No se pudo cargar el retículo GLTF, usando círculo plano.');
+      const ring = new THREE.RingGeometry(0.1, 0.12, 32).rotateX(-Math.PI / 2);
+      const mat = new THREE.MeshBasicMaterial({ color: 0x00aaff });
+      reticle = new THREE.Mesh(ring, mat);
+      reticle.visible = false;
+      scene.add(reticle);
+    }
+
+    // 5. Cargar modelo principal (coche)
+    let model;
+    try {
+      const gltfModel = await loader.loadAsync(modelPath);
+      model = gltfModel.scene;
+    } catch (err) {
+      return showError('No se pudo cargar el modelo 3D: ' + err.message);
+    }
+
+    // Guardamos referencias
+    threeRef.current = {
+      renderer,
+      scene,
+      camera,
+      reticle,
+      model,
+      hitTestSource: null,
+      referenceSpace: null,
+    };
+
+    // 6. Referencia local y fuente de hit-test
+    const referenceSpace = await session.requestReferenceSpace('local');
+    const viewerSpace = await session.requestReferenceSpace('viewer');
+    const hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
+
+    threeRef.current.hitTestSource = hitTestSource;
+    threeRef.current.referenceSpace = referenceSpace;
+
+    // 7. Evento select para colocar el modelo
+    session.addEventListener('select', () => {
+      if (!reticle.visible) return;
+      const clone = model.clone();
+      clone.position.copy(reticle.position);
+      clone.quaternion.copy(reticle.quaternion);
+      clone.scale.setScalar(0.4); // Ajusta la escala si es necesario
+      scene.add(clone);
+    });
+
+    // 8. Limpiar todo al acabar la sesión
+    session.addEventListener('end', () => {
+      if (containerRef.current) {
+        document.body.removeChild(containerRef.current);
+        containerRef.current = null;
       }
       setStage('initial');
     });
 
-    // Se debe esperar a que la escena de A-Frame esté completamente cargada
-    // antes de intentar entrar en modo inmersivo.
-    sceneEl.addEventListener('loaded', async () => {
-      console.log('[AR] Escena de A-Frame cargada. Intentando entrar en modo AR...');
-      try {
-        // La llamada a enterVR() debe estar lo más cerca posible de la interacción del usuario.
-        // A-Frame se encargará de gestionar la sesión de AR.
-        await sceneEl.enterVR();
-        setStage('started'); // La escena ya está en modo inmersivo.
-      } catch (e) {
-        console.error('[AR] Fallo al entrar en modo AR:', e);
-        setError('No se pudo iniciar la sesión de Realidad Aumentada. Asegúrate de conceder los permisos para la cámara.');
-        setStage('error');
-        // Limpia si la entrada falla
-        if (arContainerRef.current) {
-          document.body.removeChild(arContainerRef.current);
-          arContainerRef.current = null;
+    // 9. Iniciar la sesión en el renderer
+    renderer.xr.setReferenceSpaceType('local');
+    renderer.xr.setSession(session);
+
+    // 10. Animación por frame
+    renderer.setAnimationLoop((time, frame) => {
+      if (!frame) return;
+
+      const { referenceSpace, hitTestSource } = threeRef.current;
+      const hitTestResults = frame.getHitTestResults(hitTestSource);
+      if (hitTestResults.length > 0) {
+        const hit = hitTestResults[0];
+        const pose = hit.getPose(referenceSpace);
+        if (pose) {
+          reticle.visible = true;
+          reticle.matrix.fromArray(pose.transform.matrix);
+          reticle.matrix.decompose(reticle.position, reticle.quaternion, reticle.scale);
         }
+      } else {
+        reticle.visible = false;
       }
+      renderer.render(scene, camera);
     });
+
+    setStage('started');
   };
 
-  // El script de A-Frame se da por cargado globalmente para evitar conflictos.
-  // La carga dinámica de scripts se ha eliminado.
-
-  // Función principal para construir la escena de RA
-  const initARScene = () => {
-    console.log('[AR] Inicializando escena AR con hit-test para anclaje...');
-
-    // Contenedor principal para la escena y la UI
-      const arContainer = document.createElement('div');
-      arContainer.className = 'ar-scene-container';
-      document.body.appendChild(arContainer);
-    arContainerRef.current = arContainer;
-
-    // Contenedor para la interfaz de usuario sobre la vista AR
-    const arUi = document.createElement('div');
-    arUi.id = 'ar-ui';
-    arUi.style.pointerEvents = 'none'; // Permite que los toques lleguen a la escena
-
-    // Texto de instrucciones para el usuario
-    const instructionText = document.createElement('div');
-    instructionText.className = 'ar-instruction';
-    instructionText.innerHTML = 'Mueve tu teléfono para detectar una superficie';
-    arUi.appendChild(instructionText);
-
-    // Botón para salir de la experiencia AR
-    const backButton = document.createElement('button');
-    backButton.textContent = 'Salir de AR';
-    backButton.className = 'ar-button ar-back-button';
-    backButton.style.pointerEvents = 'auto';
-    backButton.addEventListener('click', () => {
-      // La forma correcta de salir es pedirle a la escena que finalice la sesión de VR/AR.
-      // Esto disparará el evento 'exit-vr' que hemos capturado arriba.
-      sceneEl.exitVR();
-    });
-    arUi.appendChild(backButton);
-    arContainer.appendChild(arUi);
-
-    // Creación de la escena de A-Frame (se devuelve para poder manipularla)
-    const sceneEl = document.createElement('a-scene');
-
-    // Creación de la escena de A-Frame
-    sceneEl.setAttribute('vr-mode-ui', 'enabled: false');
-    
-    // La clave está aquí: solicitamos 'hit-test' para poder anclar el objeto a una superficie detectada.
-    // 'local-floor' proporciona un punto de partida para el seguimiento.
-    // Se elimina 'geospatial' para simplificar y evitar posibles fuentes de error.
-    sceneEl.setAttribute('webxr', `
-      requiredFeatures: hit-test, local-floor;
-      optionalFeatures: light-estimation, dom-overlay;
-      overlayElement: #${arUi.id}
-    `);
-
-    // Assets: el modelo se cargará directamente en la entidad `a-entity` para evitar
-    // problemas de timing con `a-assets` al crear la escena dinámicamente.
-    // Por lo tanto, la sección <a-assets> no es necesaria.
-
-    // Contenedor del modelo, que se moverá con la retícula de hit-test
-    const modelContainer = document.createElement('a-entity');
-    modelContainer.id = 'model-container';
-    modelContainer.setAttribute('ar-hit-test', 'type: plane; enabled: true;');
-    modelContainer.setAttribute('visible', 'false');
-
-    // Anillo visual (retícula) que indica dónde se anclará el objeto
-    const reticleRing = document.createElement('a-entity');
-    reticleRing.id = 'reticle-ring';
-    reticleRing.setAttribute('geometry', 'primitive: ring; radiusInner: 0.04; radiusOuter: 0.06;');
-    reticleRing.setAttribute('material', 'color: #3498db; shader: flat;');
-    reticleRing.setAttribute('rotation', '-90 0 0');
-    modelContainer.appendChild(reticleRing);
-    
-    // El modelo 3D real, inicialmente invisible
-    const modelEl = document.createElement('a-entity');
-    modelEl.id = 'model';
-    // Se usa `url()` para cargar el modelo directamente, lo que es más robusto que usar el sistema de assets (#id)
-    // cuando la escena se crea por programación.
-    modelEl.setAttribute('gltf-model', `url(${selectedModel})`);
-    modelEl.setAttribute('scale', '0.3 0.3 0.3'); // Escala inicial aumentada, 0.1 puede ser muy pequeño
-    modelEl.setAttribute('visible', 'false');
-    modelContainer.appendChild(modelEl);
-
-    sceneEl.appendChild(modelContainer);
-
-    // Iluminación para que el modelo se vea bien
-    sceneEl.innerHTML += '<a-light type="ambient" color="#fff" intensity="0.6"></a-light>';
-    sceneEl.innerHTML += '<a-light type="directional" color="#fff" intensity="0.7" position="-1 2 1"></a-light>';
-    
-    arContainer.appendChild(sceneEl);
-
-    let modelPlaced = false;
-
-    // Eventos de ar-hit-test para dar feedback al usuario
-    modelContainer.addEventListener('ar-hit-test-start', () => {
-      instructionText.innerHTML = 'Sigue moviendo el teléfono...';
-    });
-    modelContainer.addEventListener('ar-hit-test-achieved', () => {
-      modelContainer.setAttribute('visible', 'true');
-      if (!modelPlaced) {
-        instructionText.innerHTML = 'Toca la pantalla para anclar el coche';
-      }
-    });
-
-    // Evento de clic en la escena para anclar el modelo
-    sceneEl.addEventListener('click', (evt) => {
-      if (modelContainer.getAttribute('visible') && !modelPlaced) {
-        console.log('[AR] Anclando modelo...');
-        modelEl.setAttribute('visible', 'true'); // Hacer visible el coche
-        reticleRing.setAttribute('visible', 'false'); // Ocultar la retícula
-        modelContainer.setAttribute('ar-hit-test', 'enabled', 'false'); // Desactivar hit-test para que no se mueva más
-        
-        instructionText.innerHTML = '¡Anclado! Muévete para verlo desde todos los ángulos.';
-        modelPlaced = true;
-        
-        // Añadir botón para reposicionar el modelo
-        const repositionButton = document.createElement('button');
-        repositionButton.textContent = 'Reposicionar';
-        repositionButton.className = 'ar-button ar-reposition-button';
-        repositionButton.style.pointerEvents = 'auto';
-        repositionButton.addEventListener('click', () => {
-           modelPlaced = false;
-           modelEl.setAttribute('visible', 'false');
-           reticleRing.setAttribute('visible', 'true');
-           modelContainer.setAttribute('ar-hit-test', 'enabled', 'true');
-           instructionText.innerHTML = 'Toca la pantalla para anclar el coche';
-           arUi.removeChild(repositionButton);
-        });
-        arUi.appendChild(repositionButton);
-      }
-    });
-
-    return sceneEl;
-  };
-
-  // Renderiza la pantalla inicial con el botón
+  /* =====================================================================
+     UI Helpers
+  ===================================================================== */
   const renderInitialScreen = () => (
-        <div className="geo-ar-permission">
+    <div className="geo-ar-permission">
       <div className="card">
         <h1 className="card-title">Realidad Aumentada</h1>
-        <p className="card-subtitle">Ancla un modelo 3D en tu entorno utilizando la cámara de tu dispositivo.</p>
+        <p className="card-subtitle">Ancla un modelo 3D en tu entorno usando la cámara.</p>
         <div className="action-buttons">
-            <button
-            onClick={startAR}
-            className="primary-btn"
-            disabled={stage === 'loading'}
-          >
+          <button onClick={startAR} className="primary-btn" disabled={stage === 'loading'}>
             {stage === 'loading' ? 'Cargando...' : 'Iniciar AR'}
-              </button>
-            </div>
-          </div>
+          </button>
         </div>
+      </div>
+    </div>
   );
 
-  // Renderiza una pantalla de carga mientras se preparan los scripts
-  const renderLoadingScreen = () => (
-    <div className="geo-ar-loading-overlay">
-      <div className="loading-spinner"></div>
-      <p className="loading-text">Preparando la experiencia AR...</p>
-        </div>
-  );
-
-  // Renderiza una pantalla de error si algo falla
   const renderErrorScreen = () => (
     <div className="geo-ar-error-overlay">
       <div className="error-card">
         <h2 className="error-title">Error</h2>
-        <p className="error-message">{error}</p>
-        <button onClick={() => setStage('initial')} className="primary-btn">
-              Volver
-            </button>
-          </div>
-        </div>
+        <p className="error-message">{errorMsg}</p>
+        <button onClick={() => setStage('initial')} className="primary-btn">Volver</button>
+      </div>
+    </div>
   );
 
   return (
     <div className="geo-ar-container">
-      {/*
-        Se muestra la pantalla inicial tanto en estado 'initial' como 'loading'.
-        La propia pantalla inicial se encarga de mostrar un estado de carga en el botón,
-        evitando así una superposición que pueda ocultar los diálogos de permisos del navegador.
-      */}
       {(stage === 'initial' || stage === 'loading') && renderInitialScreen()}
       {stage === 'error' && renderErrorScreen()}
     </div>
