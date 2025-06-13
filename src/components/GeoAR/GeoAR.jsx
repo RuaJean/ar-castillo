@@ -54,11 +54,20 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
 
     setStage('loading');
     try {
-      // Intentamos primero con todas las características útiles.
+      // Creamos un overlay mínimo (vacío) para los controles dentro de la sesión.
+      const overlayRoot = document.createElement('div');
+      overlayRoot.style.position = 'absolute';
+      overlayRoot.style.top = '0';
+      overlayRoot.style.left = '0';
+      overlayRoot.style.width = '100%';
+      overlayRoot.style.height = '100%';
+      overlayRoot.style.pointerEvents = 'none';
+      document.body.appendChild(overlayRoot);
+
       const fullOptions = {
         requiredFeatures: ['hit-test'],
         optionalFeatures: ['dom-overlay', 'anchors', 'plane-detection'],
-        domOverlay: { root: document.body },
+        domOverlay: { root: overlayRoot },
       };
 
       let session;
@@ -211,6 +220,10 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
     });
 
     setStage('started');
+
+    // Ocultamos la UI de configuración para que no tape la cámara
+    const uiContainer = document.querySelector('.geo-ar-container');
+    if (uiContainer) uiContainer.style.display = 'none';
   };
 
   /* =====================================================================
