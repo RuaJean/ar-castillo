@@ -100,10 +100,18 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
     container.style.left = '0';
     container.style.width = '100%';
     container.style.height = '100%';
-    container.style.zIndex = '0';
+    container.style.zIndex = '9999';
     container.appendChild(renderer.domElement);
     document.body.appendChild(container);
     containerRef.current = container;
+
+    // Hacemos transparente cualquier fondo de la página que pudiera tapar la cámara
+    document.documentElement.style.background = 'transparent';
+    document.body.style.background = 'transparent';
+    const rootEl = document.getElementById('root');
+    if (rootEl) rootEl.style.background = 'transparent';
+    // Opcional: desactivamos eventos para evitar scroll accidental
+    document.body.style.overflow = 'hidden';
 
     // 2. Crear la escena y la cámara
     const scene = new THREE.Scene();
