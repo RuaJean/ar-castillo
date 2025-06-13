@@ -48,11 +48,17 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
       return showError('Este dispositivo o navegador no soporta experiencias AR inmersivas.');
     }
 
+    const arcorePkg = 'com.google.ar.core';
+    if (navigator.userAgent.includes('Android') && !navigator.userAgent.includes(arcorePkg)) {
+      showError('Instala o actualiza "Google Play Services for AR" para usar Hit-Test.');
+      return;
+    }
+
     setStage('loading');
     try {
       // Intentamos primero con todas las características útiles.
       const fullOptions = {
-        requiredFeatures: ['local-floor'],
+        requiredFeatures: ['hit-test'],
         optionalFeatures: ['dom-overlay', 'anchors', 'plane-detection'],
         domOverlay: { root: document.body },
       };
@@ -64,7 +70,7 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
         console.warn('[AR] Configuración completa de sesión no soportada, intentando una versión mínima.', e);
         // Si falla, intentamos la configuración mínima
         session = await navigator.xr.requestSession('immersive-ar', {
-          requiredFeatures: ['local-floor'],
+          requiredFeatures: ['hit-test'],
         });
       }
 
@@ -82,6 +88,7 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor(0x000000, 0);
     renderer.xr.enabled = true;
     const container = document.createElement('div');
     container.style.position = 'fixed';
@@ -148,10 +155,11 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
 
     // 7. Evento select para colocar el modelo
     session.addEventListener('select', () => {
+      if (!reticle.visible) return;
       const clone = model.clone();
-      // posicionar relativo a la cámara
-      clone.position.set(0, -1.5, -2);   // Y = –1.5 ≈ suelo; Z = –2 m delante
-      clone.quaternion.copy(camera.quaternion);  // mismo giro
+      clone.position.copy(reticle.position);
+      clone.quaternion.copy(reticle.quaternion);
+      clone.scale.setScalar(0.4); // Ajusta la escala si es necesario
       scene.add(clone);
     });
 
