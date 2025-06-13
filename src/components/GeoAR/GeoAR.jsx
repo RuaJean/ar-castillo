@@ -94,6 +94,7 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setClearColor(0x000000, 0);
     renderer.xr.enabled = true;
+    renderer.autoClear = false;
     const container = document.createElement('div');
     container.style.position = 'fixed';
     container.style.top = '0';
@@ -205,6 +206,7 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
       } else {
         reticle.visible = false;
       }
+      renderer.clearDepth();
       renderer.render(scene, camera);
     });
 
