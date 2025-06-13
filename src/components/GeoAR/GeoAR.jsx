@@ -48,11 +48,9 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
       return showError('Este dispositivo o navegador no soporta experiencias AR inmersivas.');
     }
 
-    const arcorePkg = 'com.google.ar.core';
-    if (navigator.userAgent.includes('Android') && !navigator.userAgent.includes(arcorePkg)) {
-      showError('Instala o actualiza "Google Play Services for AR" para usar Hit-Test.');
-      return;
-    }
+    // Ya no usamos la detección por user-agent porque es poco fiable.
+    // Si el dispositivo carece de ARCore, el requestSession lanzará NotSupportedError
+    // y mostraremos un mensaje apropiado en el catch inferior.
 
     setStage('loading');
     try {
@@ -76,7 +74,13 @@ const GeoAR = ({ modelPath = '/models/car.glb' }) => {
 
       onSessionStarted(session);
     } catch (err) {
-      showError(err?.message || 'No se pudo iniciar la sesión de AR.');
+      if (err?.name === 'NotSupportedError') {
+        showError('Este dispositivo no soporta la característica "hit-test". Comprueba que "Google Play Services for AR" esté instalado y actualizado.');
+      } else if (err?.name === 'NotAllowedError') {
+        showError('No se concedieron permisos para la cámara.');
+      } else {
+        showError(err?.message || 'No se pudo iniciar la sesión de AR.');
+      }
     }
   };
 
